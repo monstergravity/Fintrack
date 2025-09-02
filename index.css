@@ -1,0 +1,967 @@
+:root {
+  --primary-color: #4F46E5;
+  --primary-hover-color: #4338CA;
+  --background-color: #F3F4F6;
+  --card-background-color: #FFFFFF;
+  --text-primary-color: #111827;
+  --text-secondary-color: #6B7280;
+  --border-color: #E5E7EB;
+  --success-color: #10B981;
+  --danger-color: #EF4444;
+  --warning-color: #F59E0B;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Poppins', sans-serif;
+  background-color: var(--background-color);
+  color: var(--text-primary-color);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem;
+  min-height: 100vh;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.header h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--text-primary-color);
+}
+
+.header p {
+  font-size: 1.1rem;
+  color: var(--text-secondary-color);
+  margin-top: 0.5rem;
+}
+
+.container {
+  display: flex;
+  gap: 2rem;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.input-section, .log-section {
+  background-color: var(--card-background-color);
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  border: 1px solid var(--border-color);
+}
+
+.input-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
+}
+
+.log-section {
+  flex: 2;
+  height: 85vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+textarea {
+  width: 100%;
+  min-height: 150px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+  font-family: 'Poppins', sans-serif;
+  font-size: 1rem;
+  resize: vertical;
+  margin-bottom: 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2);
+}
+
+.button-group {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.submit-button {
+  border: none;
+  border-radius: 8px;
+  padding: 0.8rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s, color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background-color: var(--primary-color);
+  color: white;
+  flex-grow: 1;
+}
+
+.submit-button:hover {
+  background-color: var(--primary-hover-color);
+}
+
+.submit-button:disabled {
+  background-color: #A5B4FC;
+  cursor: not-allowed;
+}
+
+.submit-button:active:not(:disabled) {
+    transform: translateY(1px);
+}
+
+.loader {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-left-color: #fff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.error-message {
+  color: var(--danger-color);
+  background-color: rgba(239, 68, 68, 0.1);
+  padding: 0.75rem;
+  border-radius: 8px;
+  margin-top: 1rem;
+  text-align: center;
+}
+
+/* Dashboard Section */
+.dashboard-section {
+    margin-bottom: 2rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 1.5rem;
+}
+
+.stat-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background-color: var(--background-color);
+    border-radius: 8px;
+    padding: 1rem 1.5rem;
+}
+
+.stat-card .label {
+    font-size: 0.9rem;
+    color: var(--text-secondary-color);
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.stat-card .value {
+    font-size: 1.75rem;
+    font-weight: 600;
+}
+
+.stat-card .value.income {
+    color: var(--success-color);
+}
+
+.stat-card .value.expense {
+    color: var(--danger-color);
+}
+
+.stat-card .value.warning {
+    color: var(--warning-color);
+}
+
+/* P&L and Project Summary Styles */
+.pnl-statement {
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.pnl-statement h3 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.pnl-section {
+    margin-bottom: 1rem;
+}
+
+.pnl-section > span {
+    font-weight: 500;
+    font-size: 1rem;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.pnl-header {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    font-weight: 600;
+    color: var(--text-secondary-color);
+    font-size: 0.9rem;
+    padding: 0 0.5rem 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.project-summary .pnl-header {
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+}
+
+.pnl-line {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    align-items: center;
+    padding: 0.5rem;
+    border-radius: 6px;
+}
+
+.project-line {
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+}
+
+
+.pnl-line .pnl-amount {
+    text-align: right;
+}
+
+.pnl-line.detail {
+    padding-left: 1.5rem;
+    font-size: 0.9rem;
+    color: var(--text-secondary-color);
+}
+.pnl-line:nth-child(even) {
+    background-color: var(--background-color);
+}
+
+.pnl-line.total {
+    font-weight: 600;
+    border-top: 1px solid var(--border-color);
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+}
+
+.pnl-line.net-profit {
+    font-weight: 700;
+    font-size: 1.1rem;
+    border-top: 2px solid var(--text-primary-color);
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+}
+
+.pnl-amount.income {
+    color: var(--success-color);
+}
+
+.pnl-amount.expense {
+    color: var(--danger-color);
+}
+
+/* Expense Analysis */
+.expense-analysis-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    align-items: flex-start;
+    margin-top: 2rem;
+}
+
+.category-breakdown h3 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.category-breakdown ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.no-data {
+    color: var(--text-secondary-color);
+}
+
+.category-breakdown li {
+    font-size: 0.9rem;
+}
+
+.category-info {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.25rem;
+    color: var(--text-primary-color);
+}
+
+.category-bar-container {
+    width: 100%;
+    height: 8px;
+    background-color: var(--border-color);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.category-bar {
+    height: 100%;
+    background-color: var(--primary-color);
+    border-radius: 4px;
+    transition: width 0.5s ease-in-out;
+}
+
+/* Pie Chart */
+.pie-chart-section {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.pie-chart-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+}
+.pie-chart {
+    width: 150px;
+    height: 150px;
+}
+.pie-chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem 1rem;
+    font-size: 0.8rem;
+}
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.legend-color-box {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+}
+
+/* Tab Navigation */
+.tab-nav {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 1.5rem;
+}
+
+.tab-button {
+    padding: 0.8rem 1.2rem;
+    border: none;
+    background-color: transparent;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-secondary-color);
+    position: relative;
+    transition: color 0.2s;
+}
+
+.tab-button:hover {
+    color: var(--text-primary-color);
+}
+
+.tab-button.active {
+    color: var(--primary-color);
+}
+
+.tab-button.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: var(--primary-color);
+}
+
+
+/* Transaction Log */
+.transaction-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.transaction-card {
+  background-color: #fff;
+  border: 1px solid var(--border-color);
+  border-left-width: 5px;
+  border-radius: 8px;
+  padding: 1rem 1.5rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  row-gap: 0.75rem;
+  column-gap: 1.5rem;
+  align-items: center;
+  position: relative;
+  animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.transaction-card.income {
+  border-left-color: var(--success-color);
+}
+
+.transaction-card.expense {
+  border-left-color: var(--danger-color);
+}
+
+.transaction-card .field {
+  display: flex;
+  flex-direction: column;
+}
+
+.transaction-card .label {
+  font-size: 0.8rem;
+  color: var(--text-secondary-color);
+  margin-bottom: 2px;
+}
+
+.transaction-card .value {
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.transaction-card .amount {
+  font-size: 1.2rem;
+  font-weight: 600;
+  text-align: right;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+.transaction-card.income .amount {
+  color: var(--success-color);
+}
+
+.transaction-card.expense .amount {
+  color: var(--danger-color);
+}
+
+.project-tag-container {
+    grid-column: 1 / -1;
+    margin-bottom: 0.5rem;
+}
+.project-tag {
+    display: inline-block;
+    background-color: var(--primary-color);
+    color: white;
+    padding: 0.2rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.journal-entry {
+    grid-column: 1 / -1; /* Span full width */
+    border-top: 1px solid var(--border-color);
+    padding-top: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.journal-header, .journal-line {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    font-size: 0.85rem;
+    padding: 0.25rem 0;
+}
+
+.journal-header {
+    font-weight: 600;
+    color: var(--text-secondary-color);
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 0.25rem;
+}
+
+.journal-account {
+    padding-left: 1rem;
+}
+
+.journal-line .journal-account {
+  font-style: italic;
+  color: #374151;
+}
+
+.journal-debit, .journal-credit {
+    text-align: right;
+}
+
+.transaction-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.action-btn {
+    background-color: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 0.3rem 0.8rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+    color: var(--text-secondary-color);
+}
+
+.action-btn.edit-btn:hover {
+    background-color: var(--text-primary-color);
+    border-color: var(--text-primary-color);
+    color: white;
+}
+
+.action-btn.delete-btn:hover {
+    background-color: var(--danger-color);
+    border-color: var(--danger-color);
+    color: white;
+}
+
+.empty-log {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-secondary-color);
+}
+.empty-log p {
+    font-size: 1.1rem;
+}
+
+/* Accounts Receivable & Projects View */
+.ar-view, .projects-view {
+    animation: fadeIn 0.5s ease-out;
+}
+.ar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+.ar-header .btn-primary {
+    padding: 0.6rem 1.2rem;
+    font-size: 0.9rem;
+}
+
+.invoice-list, .project-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.invoice-card {
+    background-color: var(--card-background-color);
+    border: 1px solid var(--border-color);
+    border-left-width: 5px;
+    border-radius: 8px;
+    padding: 1.2rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.invoice-card.status-draft { border-left-color: var(--text-secondary-color); }
+.invoice-card.status-sent { border-left-color: var(--primary-color); }
+.invoice-card.status-overdue { border-left-color: var(--danger-color); }
+.invoice-card.status-paid { border-left-color: var(--success-color); }
+
+
+.invoice-main-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+.invoice-main-info > div:first-child {
+    display: flex;
+    flex-direction: column;
+}
+.customer-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+.invoice-number {
+    font-size: 0.85rem;
+    color: var(--text-secondary-color);
+}
+.invoice-amount {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-primary-color);
+}
+
+.invoice-details {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+    color: var(--text-secondary-color);
+}
+
+.status-badge {
+    font-size: 0.8rem;
+    font-weight: 500;
+    padding: 0.25rem 0.6rem;
+    border-radius: 12px;
+    color: white;
+    text-transform: uppercase;
+}
+.status-badge.status-draft { background-color: var(--text-secondary-color); }
+.status-badge.status-sent { background-color: var(--primary-color); }
+.status-badge.status-overdue { background-color: var(--danger-color); }
+.status-badge.status-paid { background-color: var(--success-color); }
+
+
+.invoice-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-color);
+}
+
+/* Projects View Specifics */
+.add-project-form {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+.add-project-form input {
+    flex-grow: 1;
+    padding: 0.6rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 1rem;
+}
+.add-project-form .btn-primary {
+    padding: 0.6rem 1.2rem;
+    font-size: 0.9rem;
+}
+.project-card {
+    background-color: var(--background-color);
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 500;
+}
+.project-card .delete-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary-color);
+    font-size: 1.5rem;
+    cursor: pointer;
+    line-height: 1;
+    transition: color 0.2s;
+}
+.project-card .delete-btn:hover {
+    color: var(--danger-color);
+}
+
+
+/* Advanced Features Section */
+.advanced-features {
+    margin-top: auto;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+.advanced-features h4 {
+    font-size: 1rem;
+    margin: 1rem 0 0.5rem;
+    font-weight: 600;
+    color: var(--text-secondary-color);
+}
+.advanced-features p {
+    font-size: 0.9rem;
+    color: var(--text-secondary-color);
+    margin-bottom: 1rem;
+    line-height: 1.5;
+}
+.bank-statement-input {
+    min-height: 100px;
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: var(--text-secondary-color);
+}
+.reconcile-button {
+    width: 100%;
+    background-color: var(--text-secondary-color);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 0.7rem 1.5rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    margin-top: 0.5rem;
+}
+.reconcile-button:hover {
+    background-color: var(--text-primary-color);
+}
+
+/* Reconciliation View */
+.reconciliation-view {
+    margin-bottom: 2rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem;
+}
+.reconciliation-view h3 {
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+}
+.reconciliation-section {
+    margin-bottom: 1rem;
+}
+.reconciliation-section h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+.reconciliation-section.matched h4 {
+    color: var(--success-color);
+}
+.reconciliation-section.unmatched-ledger h4 {
+    color: var(--warning-color);
+}
+.reconciliation-section.unmatched-bank h4 {
+    color: var(--danger-color);
+}
+.reconciliation-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    padding: 0.5rem;
+    border-radius: 4px;
+}
+.reconciliation-item:nth-child(even) {
+    background-color: var(--background-color);
+}
+
+
+/* Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background-color: white;
+    padding: 2rem;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 600px;
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+
+.modal-content h2 {
+    margin-top: 0;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 1rem;
+}
+
+.form-group.full-width {
+    grid-column: 1 / -1;
+}
+
+.form-group label {
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+}
+
+.form-group input, .form-group select {
+    width: 100%;
+    padding: 0.6rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 1rem;
+}
+.form-group input:focus, .form-group select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2);
+}
+.form-group input[readonly] {
+    background-color: var(--background-color);
+    cursor: not-allowed;
+    color: var(--text-secondary-color);
+}
+
+.modal-content h4 {
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.journal-edit-header, .journal-edit-line {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+.journal-edit-header span {
+    font-size: 0.8rem;
+    color: var(--text-secondary-color);
+    font-weight: 500;
+}
+.journal-edit-line input {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.9rem;
+}
+
+.validation-error {
+    color: var(--danger-color);
+    background-color: rgba(239, 68, 68, 0.1);
+    padding: 0.75rem;
+    border-radius: 8px;
+    margin-top: 1rem;
+    text-align: center;
+    font-size: 0.9rem;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.btn-primary, .btn-secondary {
+    border: none;
+    padding: 0.7rem 1.5rem;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    color: white;
+}
+.btn-primary:hover {
+    background-color: var(--primary-hover-color);
+}
+
+.btn-secondary {
+    background-color: var(--background-color);
+    color: var(--text-primary-color);
+    border: 1px solid var(--border-color);
+}
+.btn-secondary:hover {
+    background-color: var(--border-color);
+}
+
+
+@media (max-width: 1024px) {
+    .expense-analysis-container {
+      grid-template-columns: 1fr;
+    }
+    .project-summary .pnl-header, .project-summary .pnl-line {
+        font-size: 0.8rem;
+    }
+}
+
+@media (max-width: 768px) {
+  .container {
+    flex-direction: column;
+  }
+  .log-section, .input-section {
+    height: auto;
+    max-height: 70vh;
+  }
+}
