@@ -56,7 +56,7 @@ type SearchResults = {
     bills: Bill[];
     projects: Project[];
 } | null;
-type AuthState = 'loggedOut' | 'loggingIn' | 'loggedIn';
+type AuthState = 'loggedOut' | 'loggingIn' | 'loggedIn' | 'viewingPrivacy';
 
 
 // --- Default Data ---
@@ -94,20 +94,70 @@ const initialChartOfAccounts: Account[] = [
 ];
 
 // --- Auth Components ---
-const LandingPage: React.FC<{ onLoginClick: () => void; onSignUpClick: () => void; }> = ({ onLoginClick, onSignUpClick }) => (
+const PricingSection: React.FC<{ onSelectPlan: () => void; }> = ({ onSelectPlan }) => (
+    <section className="pricing-section" id="pricing">
+        <div className="plans-header">
+            <h2>Find the right plan for your business</h2>
+            <p>Start for free and upgrade as you grow.</p>
+        </div>
+        <div className="pricing-cards-grid">
+            <div className="pricing-card">
+                <h3>Freemium</h3>
+                <div className="price"><span>$0</span>/ month</div>
+                <p className="plan-description">For individuals starting out.</p>
+                <button className="btn-secondary" onClick={onSelectPlan}>Get Started</button>
+                <ul className="features-list">
+                    <li><span>&#10003;</span> 5 transactions input each month</li>
+                    <li><span>&#10003;</span> Cashflow analysis</li>
+                    <li><span>&#10003;</span> Tax filing estimation</li>
+                    <li><span>&times;</span> No storage provided</li>
+                </ul>
+            </div>
+            <div className="pricing-card popular">
+                <div className="popular-badge">Most Popular</div>
+                <h3>Premium</h3>
+                <div className="price"><span>$9.9</span>/ month</div>
+                <p className="annual-price">$89.9 charged annually</p>
+                <p className="plan-description">For growing businesses needing more power.</p>
+                <button className="btn-primary" onClick={onSelectPlan}>Choose Premium</button>
+                <ul className="features-list">
+                    <li><span>&#10003;</span> Unlimited transactions</li>
+                    <li><span>&#10003;</span> Storage function</li>
+                    <li><span>&#10003;</span> Project based accounting</li>
+                    <li><span>&#10003;</span> All Freemium features</li>
+                </ul>
+            </div>
+            <div className="pricing-card">
+                <h3>Ultimate</h3>
+                <div className="price"><span>$19.9</span>/ month</div>
+                <p className="annual-price">$189.9 charged annually</p>
+                <p className="plan-description">For advanced tax and consultation needs.</p>
+                <button className="btn-secondary" onClick={onSelectPlan}>Choose Ultimate</button>
+                <ul className="features-list">
+                    <li><span>&#10003;</span> Tax filling checking</li>
+                    <li><span>&#10003;</span> One time tax filling consultation</li>
+                    <li><span>&#10003;</span> All Premium features</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+);
+
+
+const LandingPage: React.FC<{ onLoginClick: () => void; onPrivacyClick: () => void; }> = ({ onLoginClick, onPrivacyClick }) => (
     <div className="landing-container">
         <header className="landing-header">
             <div className="logo">Clario.ai</div>
             <nav>
                 <button className="btn-secondary" onClick={onLoginClick}>Log In</button>
-                <button className="btn-primary" onClick={onSignUpClick}>Sign Up</button>
+                <button className="btn-primary" onClick={onLoginClick}>Sign Up</button>
             </nav>
         </header>
         <main>
             <section className="hero-section">
                 <h1>Bookkeeping with Simplicity, Clarity, and Flexibility.</h1>
                 <p>Clario.ai uses AI to turn your complex financial data into a clear, manageable picture, so you can focus on what you do best.</p>
-                <button className="btn-primary btn-large" onClick={onSignUpClick}>Get Started for Free</button>
+                <button className="btn-primary btn-large" onClick={onLoginClick}>Get Started for Free</button>
             </section>
             <section className="features-section">
                 <h2>Your Financial Headaches, Solved.</h2>
@@ -126,7 +176,15 @@ const LandingPage: React.FC<{ onLoginClick: () => void; onSignUpClick: () => voi
                     </div>
                 </div>
             </section>
+            <PricingSection onSelectPlan={onLoginClick} />
         </main>
+        <footer className="landing-footer">
+            <div className="footer-links">
+                <a href="#pricing">Plans & Pricing</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); onPrivacyClick(); }}>Privacy Policy</a>
+            </div>
+            <p>&copy; 2025 Clario.ai. All rights reserved.</p>
+        </footer>
     </div>
 );
 
@@ -163,6 +221,56 @@ const LoginPage: React.FC<{ onLogin: (email: string) => void }> = ({ onLogin }) 
         </div>
     );
 };
+
+const PrivacyPolicyPage: React.FC<{ onBack: () => void; }> = ({ onBack }) => (
+    <div className="static-page-container">
+         <header className="landing-header">
+            <div className="logo">Clario.ai</div>
+            <nav>
+                <button className="btn-secondary" onClick={onBack}>Back to Home</button>
+            </nav>
+        </header>
+        <main className="static-page-content">
+            <h1>Privacy Policy</h1>
+            <p><em>Last Updated: September 5, 2025</em></p>
+
+            <section>
+                <h2>1. Introduction</h2>
+                <p>Welcome to Clario.ai. We are committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our application. Please read this privacy policy carefully. If you do not agree with the terms of this privacy policy, please do not access the application.</p>
+            </section>
+            
+            <section>
+                <h2>2. Collection of Your Information</h2>
+                <p>We may collect information about you in a variety of ways. The information we may collect via the Application includes:</p>
+                <ul>
+                    <li><strong>Personal Data:</strong> Personally identifiable information, such as your name, email address, that you voluntarily give to us when you register with the Application.</li>
+                    <li><strong>Financial Data:</strong> Financial information, such as data related to your transactions, invoices, bills, and tax calculations that you input into the application. This data is stored securely and is used solely to provide the bookkeeping services offered.</li>
+                </ul>
+            </section>
+            
+            <section>
+                <h2>3. Use of Your Information</h2>
+                <p>Having accurate information about you permits us to provide you with a smooth, efficient, and customized experience. Specifically, we may use information collected about you via the Application to:</p>
+                 <ul>
+                    <li>Create and manage your account.</li>
+                    <li>Process your transactions and perform bookkeeping services.</li>
+                    <li>Provide you with tax estimations and financial summaries.</li>
+                    <li>Email you regarding your account or order.</li>
+                </ul>
+            </section>
+
+            <section>
+                <h2>4. Security of Your Information</h2>
+                <p>We use administrative, technical, and physical security measures to help protect your personal information. While we have taken reasonable steps to secure the personal information you provide to us, please be aware that despite our efforts, no security measures are perfect or impenetrable, and no method of data transmission can be guaranteed against any interception or other type of misuse.</p>
+            </section>
+
+            <section>
+                <h2>5. Contact Us</h2>
+                <p>If you have questions or comments about this Privacy Policy, please contact us at: privacy@clario.ai</p>
+            </section>
+        </main>
+    </div>
+);
 
 
 // --- Bookkeeping App Component ---
@@ -946,8 +1054,15 @@ const App: React.FC = () => {
       setAuthState('loggedOut');
   };
 
+  if (authState === 'viewingPrivacy') {
+      return <PrivacyPolicyPage onBack={() => setAuthState('loggedOut')} />;
+  }
+
   if (authState === 'loggedOut') {
-      return <LandingPage onLoginClick={() => setAuthState('loggingIn')} onSignUpClick={() => setAuthState('loggingIn')} />;
+      return <LandingPage 
+          onLoginClick={() => setAuthState('loggingIn')}
+          onPrivacyClick={() => setAuthState('viewingPrivacy')}
+      />;
   }
 
   if (authState === 'loggingIn') {
