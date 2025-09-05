@@ -143,6 +143,69 @@ const PricingSection: React.FC<{ onSelectPlan: () => void; }> = ({ onSelectPlan 
     </section>
 );
 
+const AutomationIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
+const TaxComplianceIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>;
+const CashFlowIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>;
+const ClockIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
+const CheckIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>;
+
+
+const SolutionsSection: React.FC<{ onCTAClick: () => void; }> = ({ onCTAClick }) => (
+    <section className="solutions-section">
+        <div className="solutions-header">
+            <h2>How <span className="highlight">Clario.ai</span> Solves Your Problems</h2>
+            <p>Our AI-powered platform transforms your biggest bookkeeping challenges into simple, automated solutions.</p>
+        </div>
+        <div className="solutions-grid">
+            <div className="solution-card">
+                <div className="solution-card-header">
+                    <div className="solution-icon"><AutomationIcon /></div>
+                    <h3>One-Click Automation</h3>
+                </div>
+                <p>AI handles your bookkeeping in seconds, not hours. Connect your accounts and let Clario.ai do the rest.</p>
+                <ul className="solution-features-list">
+                    <li><CheckIcon /> Automatic transaction categorization</li>
+                    <li><CheckIcon /> Real-time expense tracking</li>
+                    <li><CheckIcon /> Instant financial reports</li>
+                </ul>
+            </div>
+            <div className="solution-card">
+                <div className="solution-card-header">
+                    <div className="solution-icon"><TaxComplianceIcon /></div>
+                    <h3>Tax Compliance Made Simple</h3>
+                </div>
+                <p>Navigate multi-state taxes and self-employment requirements with confidence and AI guidance.</p>
+                 <ul className="solution-features-list">
+                    <li><CheckIcon /> Multi-state tax preparation</li>
+                    <li><CheckIcon /> Quarterly tax estimates</li>
+                    <li><CheckIcon /> Compliance alerts & reminders</li>
+                </ul>
+            </div>
+            <div className="solution-card">
+                <div className="solution-card-header">
+                    <div className="solution-icon"><CashFlowIcon /></div>
+                    <h3>Smart Cash Flow Management</h3>
+                </div>
+                <p>Automate invoice tracking and payment follow-ups. Never chase payments manually again.</p>
+                 <ul className="solution-features-list">
+                    <li><CheckIcon /> Automated invoice reminders</li>
+                    <li><CheckIcon /> Payment tracking</li>
+                    <li><CheckIcon /> Cash flow forecasting</li>
+                </ul>
+            </div>
+        </div>
+        <div className="solutions-cta">
+             <div className="cta-setup-time">
+                <ClockIcon />
+                <span>Setup takes less than 5 minutes</span>
+            </div>
+            <h2>Ready to Simplify Your Bookkeeping?</h2>
+            <p>Join thousands of solopreneurs who've already automated their financial workflows with Clario.ai.</p>
+            <button className="btn-primary btn-large" onClick={onCTAClick}>Start Your Free Trial</button>
+        </div>
+    </section>
+);
+
 
 const LandingPage: React.FC<{ onLoginClick: () => void; onPrivacyClick: () => void; }> = ({ onLoginClick, onPrivacyClick }) => (
     <div className="landing-container">
@@ -170,23 +233,7 @@ const LandingPage: React.FC<{ onLoginClick: () => void; onPrivacyClick: () => vo
                     </a>
                 </div>
             </section>
-            <section className="features-section">
-                <h2>Your Financial Headaches, Solved.</h2>
-                <div className="feature-cards-grid">
-                    <div className="feature-card">
-                        <h3>The Time and Expertise Sink</h3>
-                        <p>You lack the time, energy, or know-how for accurate bookkeeping. Clario’s AI processes transactions from natural language, saving you hours of manual data entry.</p>
-                    </div>
-                    <div className="feature-card">
-                        <h3>The Compliance Cliff</h3>
-                        <p>The complexities of multi-state and self-employment taxes are overwhelming. Our Tax Agent provides real-time estimates to keep you prepared and in control.</p>
-                    </div>
-                    <div className="feature-card">
-                        <h3>The Cash Flow Choke</h3>
-                        <p>Manually chasing client payments is a drain. With integrated A/R and A/P aging, you get an instant, clear view of your cash flow so you always know where you stand.</p>
-                    </div>
-                </div>
-            </section>
+            <SolutionsSection onCTAClick={onLoginClick} />
             <PricingSection onSelectPlan={onLoginClick} />
         </main>
         <footer className="landing-footer">
