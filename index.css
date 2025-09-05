@@ -83,6 +83,9 @@ body {
     margin-left: auto;
     margin-right: auto;
 }
+.product-hunt-badge {
+    margin-top: 2.5rem;
+}
 .features-section {
     padding: 4rem 5%;
     text-align: center;
