@@ -149,6 +149,53 @@ const CashFlowIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="28" he
 const ClockIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
 const CheckIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>;
 
+const TimeBurdenIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
+const ComplianceCliffIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
+const CashFlowChokeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>;
+
+const ProblemsSection: React.FC = () => (
+    <section className="problems-section">
+        <div className="problems-header">
+            <h2>The Problems <span className="highlight">You Face Every Day</span></h2>
+            <p>We understand the challenges that keep you up at night. Here's what solopreneurs and small business owners tell us:</p>
+        </div>
+        <div className="problems-grid">
+            <div className="problem-card">
+                <div className="problem-card-header">
+                    <div className="problem-icon time"><TimeBurdenIcon/></div>
+                    <h3>The Time & Expertise Burden</h3>
+                </div>
+                <p>Lack the time, energy, or know-how to keep books accurate and up-to-date</p>
+                <div className="stat-highlight">
+                    <strong>73% of small businesses</strong>
+                    <strong>struggle with bookkeeping</strong>
+                </div>
+            </div>
+            <div className="problem-card">
+                <div className="problem-card-header">
+                    <div className="problem-icon compliance"><ComplianceCliffIcon/></div>
+                    <h3>The Compliance Cliff</h3>
+                </div>
+                <p>Multi-state taxes and self-employment tax complexities that can be 'close to killing us'</p>
+                <div className="stat-highlight">
+                    <strong>68% tax error rate</strong>
+                    <strong>in self-prepared business</strong>
+                </div>
+            </div>
+            <div className="problem-card">
+                <div className="problem-card-header">
+                    <div className="problem-icon cash"><CashFlowChokeIcon/></div>
+                    <h3>The Cash Flow Choke</h3>
+                </div>
+                <p>Manual process of chasing payments from clients creates constant stress</p>
+                <div className="stat-highlight">
+                    <strong>60+ days average</strong>
+                    <strong>payment time</strong>
+                </div>
+            </div>
+        </div>
+    </section>
+);
 
 const SolutionsSection: React.FC<{ onCTAClick: () => void; }> = ({ onCTAClick }) => (
     <section className="solutions-section">
@@ -233,6 +280,7 @@ const LandingPage: React.FC<{ onLoginClick: () => void; onPrivacyClick: () => vo
                     </a>
                 </div>
             </section>
+            <ProblemsSection />
             <SolutionsSection onCTAClick={onLoginClick} />
             <PricingSection onSelectPlan={onLoginClick} />
         </main>

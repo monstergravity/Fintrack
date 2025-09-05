@@ -87,6 +87,87 @@ body {
     margin-top: 2.5rem;
 }
 
+/* --- Problems Section (Landing Page) --- */
+.problems-section {
+    padding: 6rem 5%;
+    background-color: var(--background-color);
+    text-align: center;
+}
+.problems-header {
+    max-width: 700px;
+    margin: 0 auto 4rem auto;
+}
+.problems-header h2 {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+}
+.problems-header h2 .highlight {
+    color: var(--primary-color);
+}
+.problems-header p {
+    font-size: 1.1rem;
+    color: var(--text-secondary-color);
+}
+.problems-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+    text-align: left;
+}
+.problem-card {
+    background-color: var(--card-background-color);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+}
+.problem-card-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+.problem-icon {
+    border-radius: 10px;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(239, 68, 68, 0.1);
+    color: #EF4444;
+}
+.problem-card h3 {
+    font-size: 1.15rem;
+    font-weight: 600;
+}
+.problem-card p {
+    color: var(--text-secondary-color);
+    line-height: 1.6;
+    margin-bottom: 1.5rem;
+    flex-grow: 1;
+}
+.stat-highlight {
+    background-color: rgba(239, 68, 68, 0.05);
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: center;
+}
+.stat-highlight strong {
+    display: block;
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #D92D20;
+    margin-bottom: 0.5rem;
+}
+.stat-highlight span {
+    color: var(--text-secondary-color);
+    font-size: 0.9rem;
+}
+
 /* --- Solutions Section (Landing Page) --- */
 .solutions-section {
     padding: 6rem 5%;
