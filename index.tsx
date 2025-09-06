@@ -8,7 +8,7 @@ import ReactDOM from 'react-dom/client';
 import { GoogleGenAI, Type } from "@google/genai";
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, User } from 'firebase/auth';
-import { getFirestore, collection, getDocs, doc, addDoc, deleteDoc, setDoc, updateDoc, query, writeBatch, getDoc, DocumentData } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, doc, addDoc, deleteDoc, setDoc, updateDoc, query, writeBatch, getDoc, DocumentData, DocumentSnapshot } from 'firebase/firestore';
 
 
 // --- Firebase Configuration ---
@@ -497,7 +497,9 @@ const App: React.FC = () => {
                 setRecurringTransactions(fetchedRecurring as RecurringTransaction[]);
                 setChartOfAccounts((fetchedCOA as Account[]).length > 0 ? (fetchedCOA as Account[]) : initialChartOfAccounts);
 
-                if (userSettingsDoc.exists()) {
+                // FIX: Add type guard to ensure userSettingsDoc is a DocumentSnapshot before accessing .exists() and .data()
+                // This resolves the type error where userSettingsDoc was inferred as a union type including arrays.
+                if (userSettingsDoc && !Array.isArray(userSettingsDoc) && userSettingsDoc.exists()) {
                     const settings = userSettingsDoc.data();
                     if(settings.quarterlyPayments) setQuarterlyPayments(settings.quarterlyPayments);
                     if(settings.seTaxRate) setSeTaxRate(settings.seTaxRate);
@@ -664,10 +666,15 @@ const App: React.FC = () => {
       const tempNewInvoices: Invoice[] = [];
 
       parsedTransactions.forEach(t => {
-          const newTxData = {...t, reconciled: false, projectId: activeProjectId, classification: t.classification || 'business' };
+          const newTxData = {
+              ...t,
+              reconciled: false,
+              ...(activeProjectId && { projectId: activeProjectId }),
+              classification: t.classification || 'business'
+          };
           const txDocRef = doc(collection(db, 'users', user.uid, 'transactions'));
           batch.set(txDocRef, newTxData);
-          const newTxWithId = { ...newTxData, id: txDocRef.id };
+          const newTxWithId = { ...newTxData, id: txDocRef.id } as Transaction;
           tempNewTxs.push(newTxWithId);
 
           const isBill = newTxWithId.journal.some(j => j.account === 'Accounts Payable' && j.credit);
@@ -1325,7 +1332,9 @@ const App: React.FC = () => {
 async function getCollectionData<T extends DocumentData>(userId: string, collectionName: string): Promise<T[]> {
     const q = query(collection(db, 'users', userId, collectionName));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as T));
+    // FIX: Use a double cast (as unknown as T) to resolve the unsafe type conversion error.
+    // This assures TypeScript that the object shape is correct, even though it cannot be statically verified.
+    return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as unknown as T));
 }
 
 // --- Icons ---
