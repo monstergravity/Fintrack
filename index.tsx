@@ -49,8 +49,15 @@ interface Bill {
   amount: number; status: 'Open' | 'Paid'; relatedTransactionId: string;
 }
 interface RecurringTransaction {
-  id: string; description: string; frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
-  startDate: string; nextDueDate: string; details: Omit<Transaction, 'id' | 'date' | 'reconciled'>;
+  id: string;
+  recurringType: 'payment' | 'depreciation';
+  description: string;
+  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  startDate: string;
+  nextDueDate: string;
+  details: Omit<Transaction, 'id' | 'date' | 'reconciled'>;
+  assetCost?: number;
+  depreciationPeriodYears?: number;
 }
 interface QuarterlyPayments { q1: number; q2: number; q3: number; q4: number; }
 interface FinancialSummary {
@@ -83,6 +90,7 @@ const initialChartOfAccounts: Account[] = [
     { name: 'Bank', type: 'Asset' },
     { name: 'Accounts Receivable', type: 'Asset' },
     { name: 'Prepaid Expenses', type: 'Asset' },
+    { name: 'Accumulated Depreciation', type: 'Asset' },
     // Liabilities
     { name: 'Accounts Payable', type: 'Liability' },
     { name: 'Credit Card', type: 'Liability' },
@@ -97,6 +105,7 @@ const initialChartOfAccounts: Account[] = [
     { name: 'Advertising & Marketing', type: 'Expense' },
     { name: 'Bank Fees', type: 'Expense' },
     { name: 'Cost of Goods Sold', type: 'Expense' },
+    { name: 'Depreciation Expense', type: 'Expense' },
     { name: 'Dues & Subscriptions', type: 'Expense' },
     { name: 'Insurance Expense', type: 'Expense' },
     { name: 'Legal & Professional Fees', type: 'Expense' },
@@ -523,8 +532,14 @@ const App: React.FC = () => {
             let recurringCopy = { ...rec };
             let nextDueDate = new Date(recurringCopy.nextDueDate);
             nextDueDate.setHours(0, 0, 0, 0);
+            
+            let endDate: Date | null = null;
+            if (rec.recurringType === 'depreciation' && rec.depreciationPeriodYears && rec.startDate) {
+                endDate = new Date(rec.startDate);
+                endDate.setFullYear(endDate.getFullYear() + rec.depreciationPeriodYears);
+            }
 
-            while (nextDueDate <= today) {
+            while (nextDueDate <= today && (!endDate || nextDueDate < endDate)) {
                 needsUpdate = true;
                 const generatedTx: Transaction = {
                     id: crypto.randomUUID(),
@@ -1137,6 +1152,7 @@ const App: React.FC = () => {
                 recurringTransactions={recurringTransactions}
                 handleAddRecurringTransaction={handleAddRecurringTransaction}
                 handleDeleteRecurringTransaction={handleDeleteRecurringTransaction}
+                chartOfAccounts={chartOfAccounts}
             />;
         case 'journal':
             return <JournalView transactions={transactions} />;
@@ -1914,36 +1930,90 @@ const RecurringView: React.FC<{
     recurringTransactions: RecurringTransaction[],
     handleAddRecurringTransaction: (rec: Omit<RecurringTransaction, 'id'>) => void,
     handleDeleteRecurringTransaction: (id: string) => void
-}> = ({ recurringTransactions, handleAddRecurringTransaction, handleDeleteRecurringTransaction }) => {
-     // Dummy form state
+    chartOfAccounts: Account[],
+}> = ({ recurringTransactions, handleAddRecurringTransaction, handleDeleteRecurringTransaction, chartOfAccounts }) => {
+    const [formType, setFormType] = useState<'payment' | 'depreciation'>('payment');
+
+    // State for Payment form
     const [recDesc, setRecDesc] = useState('');
     const [recAmount, setRecAmount] = useState(0);
     const [recType, setRecType] = useState<'income'|'expense'>('expense');
     const [recFreq, setRecFreq] = useState<'daily'|'weekly'|'monthly'|'yearly'>('monthly');
     const [recStart, setRecStart] = useState(CURRENT_DATE_ISO);
 
-    const handleAddRec = (e: React.FormEvent) => {
+    // State for Depreciation form
+    const [assetDesc, setAssetDesc] = useState('');
+    const [assetCost, setAssetCost] = useState(0);
+    const [depreciationYears, setDepreciationYears] = useState(5);
+    const [depreciationExpenseAccount, setDepreciationExpenseAccount] = useState('Depreciation Expense');
+
+    const expenseAccounts = useMemo(() => chartOfAccounts.filter(a => a.type === 'Expense').sort((a,b) => a.name.localeCompare(b.name)), [chartOfAccounts]);
+
+    const handleAdd = (e: React.FormEvent) => {
         e.preventDefault();
-        const newRec: Omit<RecurringTransaction, 'id'> = {
-            description: recDesc,
-            frequency: recFreq,
-            startDate: recStart,
-            nextDueDate: recStart,
-            details: {
-                vendor: recDesc,
-                amount: recAmount,
-                currency: 'USD',
-                category: 'Recurring Transaction',
-                transactionType: recType,
-                classification: 'business',
-                journal: [] // Simplified for this UI
+        if (formType === 'payment') {
+            const newRec: Omit<RecurringTransaction, 'id'> = {
+                recurringType: 'payment',
+                description: recDesc,
+                frequency: recFreq,
+                startDate: recStart,
+                nextDueDate: recStart,
+                details: {
+                    vendor: recDesc,
+                    amount: recAmount,
+                    currency: 'USD',
+                    category: 'Recurring Transaction',
+                    transactionType: recType,
+                    classification: 'business',
+                    journal: [] // Simplified for this UI
+                }
+            };
+            handleAddRecurringTransaction(newRec);
+            // Reset form
+            setRecDesc('');
+            setRecAmount(0);
+        } else { // Depreciation
+            const monthlyAmount = assetCost / (depreciationYears * 12);
+            if (monthlyAmount <= 0 || !assetDesc) {
+                alert("Please fill in all asset details.");
+                return;
             }
-        };
-        handleAddRecurringTransaction(newRec);
-        // Reset form
-        setRecDesc('');
-        setRecAmount(0);
+            const newRec: Omit<RecurringTransaction, 'id'> = {
+                recurringType: 'depreciation',
+                description: assetDesc,
+                frequency: 'monthly', // Hardcoded
+                startDate: recStart,
+                nextDueDate: recStart,
+                assetCost: assetCost,
+                depreciationPeriodYears: depreciationYears,
+                details: {
+                    vendor: `${assetDesc} (Depreciation)`,
+                    amount: monthlyAmount,
+                    currency: 'USD',
+                    category: 'Depreciation',
+                    transactionType: 'expense',
+                    classification: 'business',
+                    deductible: true,
+                    journal: [
+                        { account: depreciationExpenseAccount, debit: monthlyAmount },
+                        { account: 'Accumulated Depreciation', credit: monthlyAmount }
+                    ]
+                }
+            };
+            handleAddRecurringTransaction(newRec);
+            // Reset form
+            setAssetDesc('');
+            setAssetCost(0);
+            setDepreciationYears(5);
+        }
     };
+    
+    const monthlyDepreciation = useMemo(() => {
+        if (assetCost > 0 && depreciationYears > 0) {
+            return (assetCost / (depreciationYears * 12)).toFixed(2);
+        }
+        return '0.00';
+    }, [assetCost, depreciationYears]);
 
     return (
         <div>
@@ -1951,39 +2021,79 @@ const RecurringView: React.FC<{
                 <h1>Recurring Transactions</h1>
             </div>
             <div className="card">
-                <h3>Add New Recurring Transaction</h3>
-                <form onSubmit={handleAddRec}>
-                     <div className="form-grid">
-                         <div className="form-group full-width">
-                             <label>Description</label>
-                             <input type="text" value={recDesc} onChange={e => setRecDesc(e.target.value)} required/>
-                         </div>
-                         <div className="form-group">
-                             <label>Amount</label>
-                             <input type="number" value={recAmount} onChange={e => setRecAmount(parseFloat(e.target.value) || 0)} required/>
-                         </div>
-                         <div className="form-group">
-                             <label>Type</label>
-                             <select value={recType} onChange={e => setRecType(e.target.value as any)}>
-                                 <option value="expense">Expense</option>
-                                 <option value="income">Income</option>
-                             </select>
-                         </div>
-                          <div className="form-group">
-                             <label>Frequency</label>
-                             <select value={recFreq} onChange={e => setRecFreq(e.target.value as any)}>
-                                 <option value="daily">Daily</option>
-                                 <option value="weekly">Weekly</option>
-                                 <option value="monthly">Monthly</option>
-                                 <option value="yearly">Yearly</option>
-                             </select>
-                         </div>
-                          <div className="form-group">
-                             <label>Start Date</label>
-                             <input type="date" value={recStart} onChange={e => setRecStart(e.target.value)} required/>
-                         </div>
-                     </div>
-                     <button type="submit" className="btn-primary">Add Schedule</button>
+                <h3>Add New Schedule</h3>
+                 <div className="toggle-group">
+                    <button className={formType === 'payment' ? 'active' : ''} onClick={() => setFormType('payment')}>Recurring Payment</button>
+                    <button className={formType === 'depreciation' ? 'active' : ''} onClick={() => setFormType('depreciation')}>Depreciation Schedule</button>
+                </div>
+
+                <form onSubmit={handleAdd}>
+                    {formType === 'payment' ? (
+                        <>
+                             <div className="form-grid">
+                                 <div className="form-group full-width">
+                                     <label>Description</label>
+                                     <input type="text" value={recDesc} onChange={e => setRecDesc(e.target.value)} required/>
+                                 </div>
+                                 <div className="form-group">
+                                     <label>Amount</label>
+                                     <input type="number" value={recAmount} onChange={e => setRecAmount(parseFloat(e.target.value) || 0)} required/>
+                                 </div>
+                                 <div className="form-group">
+                                     <label>Type</label>
+                                     <select value={recType} onChange={e => setRecType(e.target.value as any)}>
+                                         <option value="expense">Expense</option>
+                                         <option value="income">Income</option>
+                                     </select>
+                                 </div>
+                                  <div className="form-group">
+                                     <label>Frequency</label>
+                                     <select value={recFreq} onChange={e => setRecFreq(e.target.value as any)}>
+                                         <option value="daily">Daily</option>
+                                         <option value="weekly">Weekly</option>
+                                         <option value="monthly">Monthly</option>
+                                         <option value="yearly">Yearly</option>
+                                     </select>
+                                 </div>
+                                  <div className="form-group">
+                                     <label>Start Date</label>
+                                     <input type="date" value={recStart} onChange={e => setRecStart(e.target.value)} required/>
+                                 </div>
+                             </div>
+                             <button type="submit" className="btn-primary">Add Payment Schedule</button>
+                        </>
+                    ) : (
+                        <>
+                             <div className="form-grid">
+                                <div className="form-group full-width">
+                                    <label>Asset Description</label>
+                                    <input type="text" value={assetDesc} onChange={e => setAssetDesc(e.target.value)} required placeholder="e.g., Company Vehicle, MacBook Pro"/>
+                                </div>
+                                <div className="form-group">
+                                    <label>Original Asset Cost</label>
+                                    <input type="number" value={assetCost} onChange={e => setAssetCost(parseFloat(e.target.value) || 0)} required />
+                                </div>
+                                <div className="form-group">
+                                    <label>Depreciation Period (Years)</label>
+                                    <input type="number" value={depreciationYears} onChange={e => setDepreciationYears(parseInt(e.target.value, 10) || 0)} required />
+                                </div>
+                                 <div className="form-group">
+                                     <label>Start Date of Use</label>
+                                     <input type="date" value={recStart} onChange={e => setRecStart(e.target.value)} required/>
+                                 </div>
+                                <div className="form-group">
+                                    <label>Expense Account Category</label>
+                                    <select value={depreciationExpenseAccount} onChange={e => setDepreciationExpenseAccount(e.target.value)}>
+                                        {expenseAccounts.map(acc => <option key={acc.name} value={acc.name}>{acc.name}</option>)}
+                                    </select>
+                                </div>
+                             </div>
+                             <div className="calculated-result">
+                                Monthly Depreciation Expense: <strong>${monthlyDepreciation}</strong>
+                             </div>
+                             <button type="submit" className="btn-primary">Add Depreciation Schedule</button>
+                        </>
+                    )}
                 </form>
             </div>
 
@@ -1991,11 +2101,15 @@ const RecurringView: React.FC<{
                 {recurringTransactions.length > 0 ? recurringTransactions.map(rt => (
                      <div key={rt.id} className={`recurring-card ${rt.details.transactionType}`}>
                          <div className="recurring-card-info">
+                            <span className="recurring-type-badge">{rt.recurringType === 'depreciation' ? 'Depreciation' : 'Payment'}</span>
                              <span className="recurring-desc">{rt.description}</span>
-                             <span className="recurring-details">Next payment: {rt.nextDueDate} ({rt.frequency})</span>
+                             <span className="recurring-details">
+                                {rt.recurringType === 'depreciation' ? `Total Cost: $${rt.assetCost?.toFixed(2)} (${rt.depreciationPeriodYears} years)` : `Next payment: ${rt.nextDueDate} (${rt.frequency})`}
+                             </span>
                          </div>
                          <div className="recurring-card-finance">
                              <span className="recurring-amount">${rt.details.amount.toFixed(2)}</span>
+                             <span className="recurring-amount-label">{rt.recurringType === 'depreciation' ? 'per month' : ''}</span>
                          </div>
                          <button onClick={() => handleDeleteRecurringTransaction(rt.id)} className="delete-btn" aria-label={`Delete recurring transaction ${rt.description}`}>&times;</button>
                      </div>
