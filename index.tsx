@@ -639,7 +639,7 @@ const App: React.FC = () => {
               ...t,
               reconciled: false,
               ...(activeProjectId && { projectId: activeProjectId }),
-              classification: t.classification || 'business'
+              classification: t.classification === 'personal' ? 'personal' : 'business'
           };
           tempNewTxs.push(newTxData);
 
@@ -706,26 +706,32 @@ const App: React.FC = () => {
   };
 
   const handleUpdateTransaction = async (updatedTransaction: Transaction) => {
-    setTransactions(prev => prev.map(t => t.id === updatedTransaction.id ? updatedTransaction : t).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    setTransactions(prev => prev.map(t => t.id === updatedTransaction.id ? {...updatedTransaction, classification: updatedTransaction.classification as 'business' | 'personal'} : t).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     setIsEditModalOpen(false);
     setEditingTransaction(null);
   };
 
   const handleReconcile = () => { /* This remains a client-side only feature for now */ };
 
-  const handleCreateInvoice = async (invoiceData: Omit<Invoice, 'id' | 'status' | 'relatedTransactionId'>) => {
+  const handleCreateInvoice = async (invoiceData: Omit<Invoice, 'id' | 'status' | 'relatedTransactionId'> & { projectId?: string }) => {
     const txId = crypto.randomUUID();
     const newTransactionData: Transaction = {
         id: txId,
         vendor: invoiceData.customer, amount: invoiceData.amount, currency: 'USD', date: invoiceData.invoiceDate,
         category: 'Sales', transactionType: 'income', classification: 'business',
         journal: [{ account: 'Accounts Receivable', debit: invoiceData.amount }, { account: 'Sales Revenue', credit: invoiceData.amount }],
-        reconciled: false
+        reconciled: false,
+        projectId: invoiceData.projectId
     };
     
     const newInvoiceData: Invoice = {
         id: crypto.randomUUID(),
-        ...invoiceData,
+        customer: invoiceData.customer,
+        invoiceNumber: invoiceData.invoiceNumber,
+        invoiceDate: invoiceData.invoiceDate,
+        dueDate: invoiceData.dueDate,
+        amount: invoiceData.amount,
+        taxable: invoiceData.taxable,
         status: 'Draft',
         relatedTransactionId: txId
     };
@@ -762,7 +768,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleCreateBill = async (billData: Omit<Bill, 'id' | 'status' | 'relatedTransactionId'>) => {
+  const handleCreateBill = async (billData: Omit<Bill, 'id' | 'status' | 'relatedTransactionId'> & { projectId?: string }) => {
         const expenseAccount = 'Miscellaneous Expense';
         const txId = crypto.randomUUID();
         const newTransactionData: Transaction = {
@@ -770,12 +776,17 @@ const App: React.FC = () => {
             vendor: billData.vendor, amount: billData.amount, currency: 'USD', date: billData.billDate,
             category: 'Bill', transactionType: 'expense', classification: 'business',
             journal: [{ account: expenseAccount, debit: billData.amount }, { account: 'Accounts Payable', credit: billData.amount }],
-            reconciled: false
+            reconciled: false,
+            projectId: billData.projectId
         };
 
         const newBillData: Bill = {
             id: crypto.randomUUID(),
-            ...billData,
+            vendor: billData.vendor,
+            billNumber: billData.billNumber,
+            billDate: billData.billDate,
+            dueDate: billData.dueDate,
+            amount: billData.amount,
             status: 'Open',
             relatedTransactionId: txId
         };
@@ -1220,8 +1231,8 @@ const App: React.FC = () => {
                 chartOfAccounts={chartOfAccounts}
             />
         )}
-        {isInvoiceModalOpen && <InvoiceModal onClose={() => setIsInvoiceModalOpen(false)} onCreate={handleCreateInvoice} />}
-        {isBillModalOpen && <BillModal onClose={() => setIsBillModalOpen(false)} onCreate={handleCreateBill} />}
+        {isInvoiceModalOpen && <InvoiceModal onClose={() => setIsInvoiceModalOpen(false)} onCreate={handleCreateInvoice} projects={projects} />}
+        {isBillModalOpen && <BillModal onClose={() => setIsBillModalOpen(false)} onCreate={handleCreateBill} projects={projects} />}
     </div>
   );
 };
@@ -1530,6 +1541,67 @@ const CashFlowSummaryView = ({ data }: { data: { currentCashBalance: number; tot
     </section>
 );
 
+const ExpensePieChart: React.FC<{ data: { name: string; value: number }[]; total: number; }> = ({ data, total }) => {
+    if (total === 0 || data.length === 0) {
+        return <div className="no-data"><p>No expense data for this period.</p></div>;
+    }
+
+    const COLORS = ['#5A32D6', '#8A6FDF', '#B9A9E8', '#6B7280', '#9CA3AF', '#D1D5DB'];
+    const radius = 80;
+    const strokeWidth = 40;
+    const circumference = 2 * Math.PI * radius;
+
+    // We may have more categories than colors, so let's slice and group "Other"
+    const MAX_SLICES = COLORS.length - 1;
+    let chartData = data;
+    if (data.length > COLORS.length) {
+        const topItems = data.slice(0, MAX_SLICES);
+        const otherValue = data.slice(MAX_SLICES).reduce((acc, item) => acc + item.value, 0);
+        chartData = [...topItems, { name: 'Other', value: otherValue }];
+    }
+    
+    let cumulativePercent = 0;
+
+    return (
+        <div className="expense-pie-chart-container">
+            <svg width="200" height="200" viewBox="0 0 200 200" className="pie-chart-svg">
+                <g transform="translate(100,100) rotate(-90)">
+                    {chartData.map((item, index) => {
+                        const percent = item.value / total;
+                        const arcLength = percent * circumference;
+                        const rotation = cumulativePercent * 360;
+                        cumulativePercent += percent;
+                        
+                        return (
+                             <circle
+                                key={item.name}
+                                r={radius}
+                                cx="0"
+                                cy="0"
+                                fill="transparent"
+                                stroke={COLORS[index % COLORS.length]}
+                                strokeWidth={strokeWidth}
+                                strokeDasharray={`${arcLength} ${circumference}`}
+                                transform={`rotate(${rotation})`}
+                            />
+                        );
+                    })}
+                </g>
+            </svg>
+            <ul className="pie-legend">
+                {chartData.map((item, index) => (
+                    <li key={item.name}>
+                        <span className="legend-color-box" style={{ backgroundColor: COLORS[index % COLORS.length] }}></span>
+                        <span className="legend-label">{item.name}</span>
+                        <span className="legend-value">${item.value.toFixed(2)} ({((item.value / total) * 100).toFixed(1)}%)</span>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
+};
+
+
 const DashboardPLView: React.FC<{
     financials: Financials,
     selectedPeriod: 'q1' | 'q2' | 'q3' | 'q4' | 'ytd',
@@ -1557,12 +1629,19 @@ const DashboardPLView: React.FC<{
 
         businessTransactions.forEach(t => {
             if (t.projectId && projectsData[t.projectId]) {
-                const isSettlement = t.journal.some(j => j.account === 'Accounts Receivable' || j.account === 'Accounts Payable');
-                if (isSettlement) return;
+                const isSettlement = t.journal.some(j => (j.account === 'Accounts Receivable' && j.credit) || (j.account === 'Accounts Payable' && j.debit));
+                if (isSettlement) return; // Skip cash settlement entries for P&L
 
-                if (t.transactionType === 'income') {
+                const isAR = t.journal.some(j => j.account === 'Accounts Receivable' && j.debit);
+                const isAP = t.journal.some(j => j.account === 'Accounts Payable' && j.credit);
+
+                if (isAR) { // It's an invoice, so it's income
+                     projectsData[t.projectId].income += t.amount;
+                } else if (isAP) { // It's a bill, so it's an expense
+                     projectsData[t.projectId].expenses += t.amount;
+                } else if (t.transactionType === 'income' && !isAR) { // Other cash income
                     projectsData[t.projectId].income += t.amount;
-                } else if (t.transactionType === 'expense') {
+                } else if (t.transactionType === 'expense' && !isAP) { // Other cash expense
                     projectsData[t.projectId].expenses += t.amount;
                 }
             }
@@ -1634,22 +1713,8 @@ const DashboardPLView: React.FC<{
             </section>
             
             <div className="expense-analysis-container card">
-                <h3>Expense Analysis (YTD)</h3>
-                {expenseAccounts.length > 0 ? (
-                    <ul>
-                        {expenseAccounts.map(acc => (
-                            <li key={acc.name}>
-                                <div className="category-info">
-                                    <span>{acc.name}</span>
-                                    <span>${acc.value.toFixed(2)}</span>
-                                </div>
-                                <div className="category-bar-container">
-                                    <div className="category-bar" style={{ width: `${totalExpenses > 0 ? (acc.value / totalExpenses) * 100 : 0}%` }}></div>
-                                </div>
-                            </li>
-                        ))}
-                    </ul>
-                ) : <div className="no-data"><p>No expense data for this period.</p></div>}
+                <h3>Expense Analysis ({selectedPeriod.toUpperCase()})</h3>
+                <ExpensePieChart data={expenseAccounts} total={totalExpenses} />
             </div>
             
             <section className="project-summary card">
@@ -2464,17 +2529,18 @@ const EditTransactionModal = ({ transaction, onClose, onUpdate, chartOfAccounts 
     );
 };
 
-const InvoiceModal = ({ onClose, onCreate }: { onClose: () => void; onCreate: (data: Omit<Invoice, 'id'|'status'|'relatedTransactionId'>) => void; }) => {
+const InvoiceModal = ({ onClose, onCreate, projects }: { onClose: () => void; onCreate: (data: Omit<Invoice, 'id'|'status'|'relatedTransactionId'> & { projectId?: string }) => void; projects: Project[] }) => {
     const [customer, setCustomer] = useState('');
     const [invoiceNumber, setInvoiceNumber] = useState('');
     const [invoiceDate, setInvoiceDate] = useState(CURRENT_DATE_ISO);
     const [dueDate, setDueDate] = useState('');
     const [amount, setAmount] = useState(0);
     const [taxable, setTaxable] = useState(false);
+    const [projectId, setProjectId] = useState('');
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onCreate({ customer, invoiceNumber, invoiceDate, dueDate, amount, taxable });
+        onCreate({ customer, invoiceNumber, invoiceDate, dueDate, amount, taxable, projectId: projectId || undefined });
     };
 
     return (
@@ -2488,6 +2554,13 @@ const InvoiceModal = ({ onClose, onCreate }: { onClose: () => void; onCreate: (d
                         <div className="form-group"><label>Amount</label><input type="number" value={amount} onChange={e => setAmount(parseFloat(e.target.value))} required /></div>
                         <div className="form-group"><label>Invoice Date</label><input type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} required /></div>
                         <div className="form-group"><label>Due Date</label><input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} required /></div>
+                        <div className="form-group">
+                            <label>Assign to Project (Optional)</label>
+                            <select value={projectId} onChange={e => setProjectId(e.target.value)}>
+                                <option value="">None</option>
+                                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                        </div>
                         <div className="form-group form-group-checkbox"><label><input type="checkbox" checked={taxable} onChange={e => setTaxable(e.target.checked)} /> Is this sale taxable?</label></div>
                     </div>
                     <div className="modal-actions">
@@ -2500,16 +2573,17 @@ const InvoiceModal = ({ onClose, onCreate }: { onClose: () => void; onCreate: (d
     );
 };
 
-const BillModal = ({ onClose, onCreate }: { onClose: () => void; onCreate: (data: Omit<Bill, 'id'|'status'|'relatedTransactionId'>) => void; }) => {
+const BillModal = ({ onClose, onCreate, projects }: { onClose: () => void; onCreate: (data: Omit<Bill, 'id'|'status'|'relatedTransactionId'> & { projectId?: string }) => void; projects: Project[] }) => {
     const [vendor, setVendor] = useState('');
     const [billNumber, setBillNumber] = useState('');
     const [billDate, setBillDate] = useState(CURRENT_DATE_ISO);
     const [dueDate, setDueDate] = useState('');
     const [amount, setAmount] = useState(0);
+    const [projectId, setProjectId] = useState('');
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onCreate({ vendor, billNumber, billDate, dueDate, amount });
+        onCreate({ vendor, billNumber, billDate, dueDate, amount, projectId: projectId || undefined });
     };
 
     return (
@@ -2523,6 +2597,13 @@ const BillModal = ({ onClose, onCreate }: { onClose: () => void; onCreate: (data
                         <div className="form-group"><label>Amount</label><input type="number" value={amount} onChange={e => setAmount(parseFloat(e.target.value))} required /></div>
                         <div className="form-group"><label>Bill Date</label><input type="date" value={billDate} onChange={e => setBillDate(e.target.value)} required /></div>
                         <div className="form-group"><label>Due Date</label><input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} required /></div>
+                        <div className="form-group">
+                            <label>Assign to Project (Optional)</label>
+                            <select value={projectId} onChange={e => setProjectId(e.target.value)}>
+                                <option value="">None</option>
+                                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                        </div>
                     </div>
                     <div className="modal-actions">
                         <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
