@@ -8,7 +8,6 @@ import ReactDOM from 'react-dom/client';
 import { GoogleGenAI, Type } from "@google/genai";
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, User } from 'firebase/auth';
-import { getFirestore, collection, getDocs, doc, addDoc, deleteDoc, setDoc, updateDoc, query, writeBatch, getDoc, DocumentData, DocumentSnapshot } from 'firebase/firestore';
 
 
 // --- Firebase Configuration ---
@@ -24,7 +23,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+
 
 // --- App Constants ---
 const CURRENT_DATE = new Date('2025-09-05T12:00:00Z'); // Use a specific time in UTC to avoid timezone issues
@@ -471,62 +470,33 @@ const App: React.FC = () => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
             if (currentUser) {
                 setUser(currentUser);
                 setAuthState('loggedIn');
-                // Fetch all user data from Firestore
-                const dataPromises = [
-                    getCollectionData<Transaction>(currentUser.uid, 'transactions'),
-                    getCollectionData<Invoice>(currentUser.uid, 'invoices'),
-                    getCollectionData<Bill>(currentUser.uid, 'bills'),
-                    getCollectionData<Project>(currentUser.uid, 'projects'),
-                    getCollectionData<RecurringTransaction>(currentUser.uid, 'recurringTransactions'),
-                    getCollectionData<Account>(currentUser.uid, 'chartOfAccounts'),
-                    getDoc(doc(db, 'users', currentUser.uid)),
-                ];
-                const [
-                    fetchedTransactions, fetchedInvoices, fetchedBills, fetchedProjects,
-                    fetchedRecurring, fetchedCOA, userSettingsDoc
-                ] = await Promise.all(dataPromises);
-
-                setTransactions((fetchedTransactions as Transaction[]).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-                setInvoices(fetchedInvoices as Invoice[]);
-                setBills(fetchedBills as Bill[]);
-                setProjects(fetchedProjects as Project[]);
-                setRecurringTransactions(fetchedRecurring as RecurringTransaction[]);
-                setChartOfAccounts((fetchedCOA as Account[]).length > 0 ? (fetchedCOA as Account[]) : initialChartOfAccounts);
-
-                // FIX: Add type guard to ensure userSettingsDoc is a DocumentSnapshot before accessing .exists() and .data()
-                // This resolves the type error where userSettingsDoc was inferred as a union type including arrays.
-                if (userSettingsDoc && !Array.isArray(userSettingsDoc) && userSettingsDoc.exists()) {
-                    const settings = userSettingsDoc.data();
-                    if(settings.quarterlyPayments) setQuarterlyPayments(settings.quarterlyPayments);
-                    if(settings.seTaxRate) setSeTaxRate(settings.seTaxRate);
-                    if(settings.salesTaxRate) setSalesTaxRate(settings.salesTaxRate);
-                    if(settings.irsMileageRate) setIrsMileageRate(settings.irsMileageRate);
-                }
-
+                // Reset state on login, as there is no DB persistence
+                setTransactions([]);
+                setInvoices([]);
+                setBills([]);
+                setProjects([]);
+                setRecurringTransactions([]);
+                setChartOfAccounts(initialChartOfAccounts);
+                setQuarterlyPayments({q1:0, q2:0, q3:0, q4:0});
             } else {
                 setUser(null);
                 setAuthState('loggedOut');
-                // Reset all state
-                setTransactions([]); setInvoices([]); setBills([]); setProjects([]);
-                setRecurringTransactions([]); setChartOfAccounts(initialChartOfAccounts);
+                // Reset all state on logout
+                setTransactions([]);
+                setInvoices([]);
+                setBills([]);
+                setProjects([]);
+                setRecurringTransactions([]);
+                setChartOfAccounts(initialChartOfAccounts);
                 setQuarterlyPayments({q1:0, q2:0, q3:0, q4:0});
             }
         });
         return () => unsubscribe();
     }, []);
-
-    useEffect(() => {
-        if (!user) return;
-        const userSettings = { quarterlyPayments, seTaxRate, salesTaxRate, irsMileageRate };
-        const timer = setTimeout(() => {
-            setDoc(doc(db, 'users', user.uid), userSettings, { merge: true });
-        }, 2000); // Debounce settings save
-        return () => clearTimeout(timer);
-    }, [quarterlyPayments, seTaxRate, salesTaxRate, irsMileageRate, user]);
 
 
     useEffect(() => {
@@ -545,7 +515,7 @@ const App: React.FC = () => {
         const today = CURRENT_DATE;
         today.setHours(0, 0, 0, 0);
 
-        const newTransactions: Omit<Transaction, 'id'>[] = [];
+        const newTransactions: Transaction[] = [];
         const updatedRecurring: RecurringTransaction[] = [];
         let needsUpdate = false;
 
@@ -556,7 +526,8 @@ const App: React.FC = () => {
 
             while (nextDueDate <= today) {
                 needsUpdate = true;
-                const generatedTx: Omit<Transaction, 'id'> = {
+                const generatedTx: Transaction = {
+                    id: crypto.randomUUID(),
                     ...recurringCopy.details,
                     date: recurringCopy.nextDueDate,
                     reconciled: false,
@@ -577,27 +548,9 @@ const App: React.FC = () => {
             updatedRecurring.push(recurringCopy);
         });
 
-        if (needsUpdate && user) {
-            (async () => {
-                const batch = writeBatch(db);
-                const finalNewTxs: Transaction[] = [];
-
-                newTransactions.forEach(tx => {
-                    const docRef = doc(collection(db, 'users', user.uid, 'transactions'));
-                    batch.set(docRef, tx);
-                    finalNewTxs.push({ ...tx, id: docRef.id });
-                });
-
-                updatedRecurring.forEach(rec => {
-                    const docRef = doc(db, 'users', user.uid, 'recurringTransactions', rec.id);
-                    batch.update(docRef, { nextDueDate: rec.nextDueDate });
-                });
-
-                await batch.commit();
-
-                setTransactions(prev => [...finalNewTxs, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-                setRecurringTransactions(updatedRecurring);
-            })();
+        if (needsUpdate) {
+            setTransactions(prev => [...newTransactions, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+            setRecurringTransactions(updatedRecurring);
         }
 
         hasCheckedRecurring.current = true;
@@ -660,54 +613,48 @@ const App: React.FC = () => {
       
       const parsedTransactions = JSON.parse(responseText) as Omit<Transaction, 'id'>[];
       
-      const batch = writeBatch(db);
       const tempNewTxs: Transaction[] = [];
       const tempNewBills: Bill[] = [];
       const tempNewInvoices: Invoice[] = [];
 
       parsedTransactions.forEach(t => {
-          const newTxData = {
+          const newTxId = crypto.randomUUID();
+          const newTxData: Transaction = {
+              id: newTxId,
               ...t,
               reconciled: false,
               ...(activeProjectId && { projectId: activeProjectId }),
               classification: t.classification || 'business'
           };
-          const txDocRef = doc(collection(db, 'users', user.uid, 'transactions'));
-          batch.set(txDocRef, newTxData);
-          const newTxWithId = { ...newTxData, id: txDocRef.id } as Transaction;
-          tempNewTxs.push(newTxWithId);
+          tempNewTxs.push(newTxData);
 
-          const isBill = newTxWithId.journal.some(j => j.account === 'Accounts Payable' && j.credit);
-          const isInvoice = newTxWithId.journal.some(j => j.account === 'Accounts Receivable' && j.debit);
+          const isBill = newTxData.journal.some(j => j.account === 'Accounts Payable' && j.credit);
+          const isInvoice = newTxData.journal.some(j => j.account === 'Accounts Receivable' && j.debit);
 
           if (isBill) {
-              const dueDate = new Date(newTxWithId.date);
+              const dueDate = new Date(newTxData.date);
               dueDate.setDate(dueDate.getDate() + 30);
-              const billDocRef = doc(collection(db, 'users', user.uid, 'bills'));
-              const newBillData = {
-                  vendor: newTxWithId.vendor, billNumber: `B-${Date.now()}`, billDate: newTxWithId.date,
-                  dueDate: dueDate.toISOString().split('T')[0], amount: newTxWithId.amount, status: 'Open' as 'Open',
-                  relatedTransactionId: newTxWithId.id
+              const newBillData: Bill = {
+                  id: crypto.randomUUID(),
+                  vendor: newTxData.vendor, billNumber: `B-${Date.now()}`, billDate: newTxData.date,
+                  dueDate: dueDate.toISOString().split('T')[0], amount: newTxData.amount, status: 'Open' as 'Open',
+                  relatedTransactionId: newTxId
               };
-              batch.set(billDocRef, newBillData);
-              tempNewBills.push({ ...newBillData, id: billDocRef.id });
+              tempNewBills.push(newBillData);
           }
           if (isInvoice) {
-              const dueDate = new Date(newTxWithId.date);
+              const dueDate = new Date(newTxData.date);
               dueDate.setDate(dueDate.getDate() + 30);
-              const invDocRef = doc(collection(db, 'users', user.uid, 'invoices'));
-              const newInvData = {
-                  customer: newTxWithId.vendor, invoiceNumber: `INV-${Date.now()}`, invoiceDate: newTxWithId.date,
-                  dueDate: dueDate.toISOString().split('T')[0], amount: newTxWithId.amount, status: 'Sent' as 'Sent',
-                  relatedTransactionId: newTxWithId.id, taxable: false,
+              const newInvData: Invoice = {
+                  id: crypto.randomUUID(),
+                  customer: newTxData.vendor, invoiceNumber: `INV-${Date.now()}`, invoiceDate: newTxData.date,
+                  dueDate: dueDate.toISOString().split('T')[0], amount: newTxData.amount, status: 'Sent' as 'Sent',
+                  relatedTransactionId: newTxId, taxable: false,
               };
-              batch.set(invDocRef, newInvData);
-              tempNewInvoices.push({ ...newInvData, id: invDocRef.id });
+              tempNewInvoices.push(newInvData);
           }
       });
       
-      await batch.commit();
-
       setTransactions(prev => [...tempNewTxs, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
       if (tempNewBills.length > 0) setBills(prev => [...tempNewBills, ...prev]);
       if (tempNewInvoices.length > 0) setInvoices(prev => [...tempNewInvoices, ...prev]);
@@ -726,23 +673,16 @@ const App: React.FC = () => {
   };
 
   const handleDeleteTransaction = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this transaction?') && user) {
-        try {
-            await deleteDoc(doc(db, 'users', user.uid, 'transactions', id));
-            setTransactions(prev => prev.filter(t => t.id !== id));
-        } catch (e) { console.error(e); setError('Failed to delete transaction.'); }
+    if (window.confirm('Are you sure you want to delete this transaction?')) {
+        setTransactions(prev => prev.filter(t => t.id !== id));
     }
   };
 
   const handleToggleTransactionClassification = async (transactionId: string) => {
-    if (!user) return;
     const tx = transactions.find(t => t.id === transactionId);
     if (!tx) return;
     const newClassification = tx.classification === 'business' ? 'personal' : 'business';
-    try {
-        await updateDoc(doc(db, 'users', user.uid, 'transactions', transactionId), { classification: newClassification });
-        setTransactions(prev => prev.map(t => t.id === transactionId ? { ...t, classification: newClassification } : t));
-    } catch (e) { console.error(e); setError('Failed to update transaction classification.'); }
+    setTransactions(prev => prev.map(t => t.id === transactionId ? { ...t, classification: newClassification } : t));
   };
 
   const handleOpenEditModal = (transaction: Transaction) => {
@@ -751,190 +691,139 @@ const App: React.FC = () => {
   };
 
   const handleUpdateTransaction = async (updatedTransaction: Transaction) => {
-    if (!user) return;
-    try {
-        const { id, ...dataToUpdate } = updatedTransaction;
-        await setDoc(doc(db, 'users', user.uid, 'transactions', id), dataToUpdate);
-        setTransactions(prev => prev.map(t => t.id === id ? updatedTransaction : t).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-        setIsEditModalOpen(false);
-        setEditingTransaction(null);
-    } catch (e) { console.error(e); setError('Failed to update transaction.'); }
+    setTransactions(prev => prev.map(t => t.id === updatedTransaction.id ? updatedTransaction : t).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    setIsEditModalOpen(false);
+    setEditingTransaction(null);
   };
 
   const handleReconcile = () => { /* This remains a client-side only feature for now */ };
 
   const handleCreateInvoice = async (invoiceData: Omit<Invoice, 'id' | 'status' | 'relatedTransactionId'>) => {
-    if (!user) return;
-    const txDocRef = doc(collection(db, 'users', user.uid, 'transactions'));
-    const newTransactionData: Omit<Transaction, 'id'> = {
+    const txId = crypto.randomUUID();
+    const newTransactionData: Transaction = {
+        id: txId,
         vendor: invoiceData.customer, amount: invoiceData.amount, currency: 'USD', date: invoiceData.invoiceDate,
         category: 'Sales', transactionType: 'income', classification: 'business',
         journal: [{ account: 'Accounts Receivable', debit: invoiceData.amount }, { account: 'Sales Revenue', credit: invoiceData.amount }],
         reconciled: false
     };
     
-    const invDocRef = doc(collection(db, 'users', user.uid, 'invoices'));
-    const newInvoiceData: Omit<Invoice, 'id'> = { ...invoiceData, status: 'Draft', relatedTransactionId: txDocRef.id };
+    const newInvoiceData: Invoice = {
+        id: crypto.randomUUID(),
+        ...invoiceData,
+        status: 'Draft',
+        relatedTransactionId: txId
+    };
 
-    try {
-        const batch = writeBatch(db);
-        batch.set(txDocRef, newTransactionData);
-        batch.set(invDocRef, newInvoiceData);
-        await batch.commit();
-
-        setTransactions(prev => [{...newTransactionData, id: txDocRef.id}, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-        setInvoices(prev => [{...newInvoiceData, id: invDocRef.id}, ...prev]);
-        setIsInvoiceModalOpen(false);
-    } catch (e) { console.error(e); setError('Failed to create invoice.'); }
+    setTransactions(prev => [newTransactionData, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    setInvoices(prev => [newInvoiceData, ...prev]);
+    setIsInvoiceModalOpen(false);
   };
 
   const handleUpdateInvoiceStatus = async (invoiceId: string, status: 'Sent' | 'Paid') => {
-      if (!user) return;
       const invoice = invoices.find(inv => inv.id === invoiceId);
       if (!invoice) return;
 
-      const batch = writeBatch(db);
-      try {
-          if (status === 'Paid' && invoice.status !== 'Paid') {
-              const paymentTxRef = doc(collection(db, 'users', user.uid, 'transactions'));
-              const settlementTransactionData: Omit<Transaction, 'id'> = {
-                  vendor: invoice.customer, amount: invoice.amount, currency: 'USD', date: CURRENT_DATE_ISO,
-                  category: 'Payment', transactionType: 'income', classification: 'business',
-                  journal: [{ account: 'Bank', debit: invoice.amount }, { account: 'Accounts Receivable', credit: invoice.amount }],
-                  reconciled: false
-              };
-              batch.set(paymentTxRef, settlementTransactionData);
-              setTransactions(prev => [{...settlementTransactionData, id: paymentTxRef.id}, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-          }
-          batch.update(doc(db, 'users', user.uid, 'invoices', invoiceId), { status });
-          await batch.commit();
-          setInvoices(prev => prev.map(inv => inv.id === invoiceId ? {...inv, status} : inv));
-      } catch (e) { console.error(e); setError('Failed to update invoice status.'); }
+      if (status === 'Paid' && invoice.status !== 'Paid') {
+          const settlementTransactionData: Transaction = {
+              id: crypto.randomUUID(),
+              vendor: invoice.customer, amount: invoice.amount, currency: 'USD', date: CURRENT_DATE_ISO,
+              category: 'Payment', transactionType: 'income', classification: 'business',
+              journal: [{ account: 'Bank', debit: invoice.amount }, { account: 'Accounts Receivable', credit: invoice.amount }],
+              reconciled: false
+          };
+          setTransactions(prev => [settlementTransactionData, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      }
+      setInvoices(prev => prev.map(inv => inv.id === invoiceId ? {...inv, status} : inv));
   };
 
   const handleDeleteInvoice = async (invoiceId: string) => {
-    if (window.confirm('Are you sure you want to delete this invoice and its related transaction?') && user) {
+    if (window.confirm('Are you sure you want to delete this invoice and its related transaction?')) {
         const invoiceToDelete = invoices.find(inv => inv.id === invoiceId);
         if (invoiceToDelete) {
-            try {
-                const batch = writeBatch(db);
-                batch.delete(doc(db, 'users', user.uid, 'transactions', invoiceToDelete.relatedTransactionId));
-                batch.delete(doc(db, 'users', user.uid, 'invoices', invoiceId));
-                await batch.commit();
-                setTransactions(prev => prev.filter(t => t.id !== invoiceToDelete.relatedTransactionId));
-                setInvoices(prev => prev.filter(inv => inv.id !== invoiceId));
-            } catch (e) { console.error(e); setError('Failed to delete invoice.'); }
+            setTransactions(prev => prev.filter(t => t.id !== invoiceToDelete.relatedTransactionId));
+            setInvoices(prev => prev.filter(inv => inv.id !== invoiceId));
         }
     }
   };
 
   const handleCreateBill = async (billData: Omit<Bill, 'id' | 'status' | 'relatedTransactionId'>) => {
-        if (!user) return;
         const expenseAccount = 'Miscellaneous Expense';
-        const txDocRef = doc(collection(db, 'users', user.uid, 'transactions'));
-        const newTransactionData: Omit<Transaction, 'id'> = {
+        const txId = crypto.randomUUID();
+        const newTransactionData: Transaction = {
+            id: txId,
             vendor: billData.vendor, amount: billData.amount, currency: 'USD', date: billData.billDate,
             category: 'Bill', transactionType: 'expense', classification: 'business',
             journal: [{ account: expenseAccount, debit: billData.amount }, { account: 'Accounts Payable', credit: billData.amount }],
             reconciled: false
         };
 
-        const billDocRef = doc(collection(db, 'users', user.uid, 'bills'));
-        const newBillData: Omit<Bill, 'id'> = { ...billData, status: 'Open', relatedTransactionId: txDocRef.id };
+        const newBillData: Bill = {
+            id: crypto.randomUUID(),
+            ...billData,
+            status: 'Open',
+            relatedTransactionId: txId
+        };
         
-        try {
-            const batch = writeBatch(db);
-            batch.set(txDocRef, newTransactionData);
-            batch.set(billDocRef, newBillData);
-            await batch.commit();
-            setTransactions(prev => [{...newTransactionData, id: txDocRef.id}, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-            setBills(prev => [{...newBillData, id: billDocRef.id}, ...prev]);
-            setIsBillModalOpen(false);
-        } catch (e) { console.error(e); setError('Failed to create bill.'); }
+        setTransactions(prev => [newTransactionData, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        setBills(prev => [newBillData, ...prev]);
+        setIsBillModalOpen(false);
     };
 
     const handleUpdateBillStatus = async (billId: string, status: 'Paid') => {
-        if (!user) return;
         const bill = bills.find(b => b.id === billId);
         if (!bill || bill.status === 'Paid') return;
         
-        const batch = writeBatch(db);
-        try {
-            const paymentTxRef = doc(collection(db, 'users', user.uid, 'transactions'));
-            const paymentTransactionData: Omit<Transaction, 'id'> = {
-                vendor: bill.vendor, amount: bill.amount, currency: 'USD', date: CURRENT_DATE_ISO,
-                category: 'Payment', transactionType: 'expense', classification: 'business',
-                journal: [{ account: 'Accounts Payable', debit: bill.amount }, { account: 'Bank', credit: bill.amount }],
-                reconciled: false
-            };
-            batch.set(paymentTxRef, paymentTransactionData);
-            batch.update(doc(db, 'users', user.uid, 'bills', billId), { status });
-            await batch.commit();
+        const paymentTransactionData: Transaction = {
+            id: crypto.randomUUID(),
+            vendor: bill.vendor, amount: bill.amount, currency: 'USD', date: CURRENT_DATE_ISO,
+            category: 'Payment', transactionType: 'expense', classification: 'business',
+            journal: [{ account: 'Accounts Payable', debit: bill.amount }, { account: 'Bank', credit: bill.amount }],
+            reconciled: false
+        };
 
-            setTransactions(prev => [{...paymentTransactionData, id: paymentTxRef.id}, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-            setBills(prev => prev.map(b => b.id === billId ? { ...b, status } : b));
-        } catch (e) { console.error(e); setError('Failed to update bill status.'); }
+        setTransactions(prev => [paymentTransactionData, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        setBills(prev => prev.map(b => b.id === billId ? { ...b, status } : b));
     };
 
     const handleDeleteBill = async (billId: string) => {
-        if (window.confirm('Are you sure you want to delete this bill and its related transaction?') && user) {
+        if (window.confirm('Are you sure you want to delete this bill and its related transaction?')) {
             const billToDelete = bills.find(b => b.id === billId);
             if (billToDelete) {
-                try {
-                    const batch = writeBatch(db);
-                    batch.delete(doc(db, 'users', user.uid, 'transactions', billToDelete.relatedTransactionId));
-                    batch.delete(doc(db, 'users', user.uid, 'bills', billId));
-                    await batch.commit();
-                    setTransactions(prev => prev.filter(t => t.id !== billToDelete.relatedTransactionId));
-                    setBills(prev => prev.filter(b => b.id !== billId));
-                } catch (e) { console.error(e); setError('Failed to delete bill.'); }
+                setTransactions(prev => prev.filter(t => t.id !== billToDelete.relatedTransactionId));
+                setBills(prev => prev.filter(b => b.id !== billId));
             }
         }
     };
 
 
   const handleAddProject = async (projectName: string) => {
-    if (projectName.trim() && user) {
-        try {
-            const newProjectData = { name: projectName.trim() };
-            const docRef = await addDoc(collection(db, 'users', user.uid, 'projects'), newProjectData);
-            setProjects(prev => [...prev, { ...newProjectData, id: docRef.id }]);
-        } catch (e) { console.error(e); setError('Failed to add project.'); }
+    if (projectName.trim()) {
+        const newProject: Project = { name: projectName.trim(), id: crypto.randomUUID() };
+        setProjects(prev => [...prev, newProject]);
     }
   };
 
   const handleDeleteProject = async (projectId: string) => {
-    if (window.confirm('Are you sure you want to delete this project? This will not delete associated transactions.') && user) {
-        try {
-            await deleteDoc(doc(db, 'users', user.uid, 'projects', projectId));
-            setProjects(prev => prev.filter(p => p.id !== projectId));
-        } catch (e) { console.error(e); setError('Failed to delete project.'); }
+    if (window.confirm('Are you sure you want to delete this project? This will not delete associated transactions.')) {
+        setProjects(prev => prev.filter(p => p.id !== projectId));
     }
   };
 
   const handleAddRecurringTransaction = async (newRecurring: Omit<RecurringTransaction, 'id'>) => {
-      if (!user) return;
-      try {
-          const docRef = await addDoc(collection(db, 'users', user.uid, 'recurringTransactions'), newRecurring);
-          setRecurringTransactions(prev => [...prev, { ...newRecurring, id: docRef.id }]);
-      } catch (e) { console.error(e); setError('Failed to add recurring transaction.'); }
+      const newRecWithId = { ...newRecurring, id: crypto.randomUUID() };
+      setRecurringTransactions(prev => [...prev, newRecWithId]);
   };
 
   const handleDeleteRecurringTransaction = async (id: string) => {
-      if (window.confirm('Are you sure you want to delete this recurring transaction schedule?') && user) {
-          try {
-            await deleteDoc(doc(db, 'users', user.uid, 'recurringTransactions', id));
-            setRecurringTransactions(prev => prev.filter(rt => rt.id !== id));
-          } catch (e) { console.error(e); setError('Failed to delete recurring transaction.'); }
+      if (window.confirm('Are you sure you want to delete this recurring transaction schedule?')) {
+          setRecurringTransactions(prev => prev.filter(rt => rt.id !== id));
       }
   };
 
   const handleAddAccount = async (account: Account) => {
-    if (account.name.trim() && !chartOfAccounts.some(acc => acc.name.toLowerCase() === account.name.toLowerCase().trim()) && user) {
-        try {
-            await addDoc(collection(db, 'users', user.uid, 'chartOfAccounts'), account);
-            setChartOfAccounts(prev => [...prev, account].sort((a,b) => a.name.localeCompare(b.name)));
-        } catch (e) { console.error(e); setError('Failed to add account.'); }
+    if (account.name.trim() && !chartOfAccounts.some(acc => acc.name.toLowerCase() === account.name.toLowerCase().trim())) {
+        setChartOfAccounts(prev => [...prev, account].sort((a,b) => a.name.localeCompare(b.name)));
     } else {
         alert("Account name must be unique.");
     }
@@ -1263,16 +1152,9 @@ const App: React.FC = () => {
   };
 
   const handleSignUp = async (email: string, pass: string) => {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-      const user = userCredential.user;
-      // Create initial data for the new user
-      const batch = writeBatch(db);
-      initialChartOfAccounts.forEach(account => {
-          const docRef = doc(collection(db, 'users', user.uid, 'chartOfAccounts'));
-          batch.set(docRef, account);
-      });
-      await batch.commit();
-      setChartOfAccounts(initialChartOfAccounts); // Set initial state locally
+      await createUserWithEmailAndPassword(auth, email, pass);
+      // No initial data is created in DB anymore, local state handles it.
+      setChartOfAccounts(initialChartOfAccounts);
   };
 
   const handleLogout = () => {
@@ -1329,13 +1211,9 @@ const App: React.FC = () => {
 };
 
 // --- Helper Functions ---
-async function getCollectionData<T extends DocumentData>(userId: string, collectionName: string): Promise<T[]> {
-    const q = query(collection(db, 'users', userId, collectionName));
-    const snapshot = await getDocs(q);
-    // FIX: Use a double cast (as unknown as T) to resolve the unsafe type conversion error.
-    // This assures TypeScript that the object shape is correct, even though it cannot be statically verified.
-    return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as unknown as T));
-}
+// No longer needed as we don't fetch from Firestore
+// async function getCollectionData<T extends DocumentData>(userId: string, collectionName: string): Promise<T[]> { ... }
+
 
 // --- Icons ---
 const HomeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>;
