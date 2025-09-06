@@ -6,6 +6,25 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import ReactDOM from 'react-dom/client';
 import { GoogleGenAI, Type } from "@google/genai";
+import { initializeApp } from 'firebase/app';
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, User } from 'firebase/auth';
+import { getFirestore, collection, getDocs, doc, addDoc, deleteDoc, setDoc, updateDoc, query, writeBatch, getDoc, DocumentData } from 'firebase/firestore';
+
+
+// --- Firebase Configuration ---
+const firebaseConfig = {
+    apiKey: "AIzaSyCZVuMksiSkmJ0B5-7ljRtFgNVpcllo5JA",
+    authDomain: "clario-b3dfd.firebaseapp.com",
+    projectId: "clario-b3dfd",
+    storageBucket: "clario-b3dfd.firebasestorage.app",
+    messagingSenderId: "769070251641",
+    appId: "1:769070251641:web:5f82ce7d5d48c7b2ac5ea8",
+    measurementId: "G-9510BNDX49"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
 // --- App Constants ---
 const CURRENT_DATE = new Date('2025-09-05T12:00:00Z'); // Use a specific time in UTC to avoid timezone issues
@@ -14,24 +33,24 @@ const CURRENT_DATE_ISO = CURRENT_DATE.toISOString().split('T')[0];
 // --- Data Structures ---
 interface Account { name: string; type: 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Expense'; }
 interface JournalEntry { account: string; debit?: number; credit?: number; }
-interface Project { id: number; name: string; }
+interface Project { id: string; name: string; }
 interface Transaction {
-  id: number; vendor: string; amount: number; currency: string; date: string; category: string;
+  id: string; vendor: string; amount: number; currency: string; date: string; category: string;
   transactionType: 'income' | 'expense'; journal: JournalEntry[]; reconciled?: boolean;
-  projectId?: number; deductible?: boolean; miles?: number; classification: 'business' | 'personal';
+  projectId?: string; deductible?: boolean; miles?: number; classification: 'business' | 'personal';
 }
 interface BankStatementEntry { date: string; description: string; amount: number; }
 interface ReconciliationResults { matched: Transaction[]; unmatchedLedger: Transaction[]; unmatchedBank: BankStatementEntry[]; }
 interface Invoice {
-  id: number; customer: string; invoiceNumber: string; invoiceDate: string; dueDate: string;
-  amount: number; status: 'Draft' | 'Sent' | 'Paid'; relatedTransactionId: number; taxable?: boolean;
+  id: string; customer: string; invoiceNumber: string; invoiceDate: string; dueDate: string;
+  amount: number; status: 'Draft' | 'Sent' | 'Paid'; relatedTransactionId: string; taxable?: boolean;
 }
 interface Bill {
-  id: number; vendor: string; billNumber: string; billDate: string; dueDate: string;
-  amount: number; status: 'Open' | 'Paid'; relatedTransactionId: number;
+  id: string; vendor: string; billNumber: string; billDate: string; dueDate: string;
+  amount: number; status: 'Open' | 'Paid'; relatedTransactionId: string;
 }
 interface RecurringTransaction {
-  id: number; description: string; frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  id: string; description: string; frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
   startDate: string; nextDueDate: string; details: Omit<Transaction, 'id' | 'date' | 'reconciled'>;
 }
 interface QuarterlyPayments { q1: number; q2: number; q3: number; q4: number; }
@@ -56,7 +75,7 @@ type SearchResults = {
     bills: Bill[];
     projects: Project[];
 } | null;
-type AuthState = 'loggedOut' | 'loggingIn' | 'loggedIn' | 'viewingPrivacy';
+type AuthState = 'loading' |'loggedOut' | 'loggingIn' | 'loggedIn' | 'viewingPrivacy';
 
 
 // --- Default Data ---
@@ -294,35 +313,68 @@ const LandingPage: React.FC<{ onLoginClick: () => void; onPrivacyClick: () => vo
     </div>
 );
 
-const LoginPage: React.FC<{ onLogin: (email: string) => void }> = ({ onLogin }) => {
+const LoginPage: React.FC<{
+    onLogin: (email: string, pass: string) => Promise<void>;
+    onSignUp: (email: string, pass: string) => Promise<void>;
+}> = ({ onLogin, onSignUp }) => {
     const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [isSignUp, setIsSignUp] = useState(false);
+    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (email) {
-            onLogin(email);
+        setError('');
+        setIsLoading(true);
+        if (email && password) {
+            try {
+                if (isSignUp) {
+                    await onSignUp(email, password);
+                } else {
+                    await onLogin(email, password);
+                }
+            } catch (err: any) {
+                // Firebase provides user-friendly error messages
+                setError(err.message.replace('Firebase: ', ''));
+            }
         }
+        setIsLoading(false);
     };
 
     return (
         <div className="login-page">
             <div className="login-content card">
-                <h1>Login to Clario.ai</h1>
-                <p>Enter your email to access your dashboard.</p>
+                <h1>{isSignUp ? 'Create an Account' : 'Login to Clario.ai'}</h1>
+                <p>Enter your details to access your dashboard.</p>
+                {error && <div className="error-message" style={{marginBottom: '1rem', color: 'var(--danger-color)'}}>{error}</div>}
                 <form onSubmit={handleSubmit}>
                     <div className="form-group full-width">
                         <label htmlFor="email">Email Address</label>
                         <input
-                            type="email"
-                            id="email"
-                            value={email}
+                            type="email" id="email" value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            placeholder="you@example.com"
-                            required
+                            placeholder="you@example.com" required disabled={isLoading}
                         />
                     </div>
-                    <button className="btn-primary btn-large" type="submit">Log In</button>
+                     <div className="form-group full-width">
+                        <label htmlFor="password">Password</label>
+                        <input
+                            type="password" id="password" value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="••••••••" required disabled={isLoading}
+                        />
+                    </div>
+                    <button className="btn-primary btn-large" type="submit" disabled={isLoading}>
+                        {isLoading ? <span className="loader"/> : (isSignUp ? 'Sign Up' : 'Log In')}
+                    </button>
                 </form>
+                 <p style={{ marginTop: '1.5rem', fontSize: '0.9rem' }}>
+                    {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+                    <a href="#" onClick={(e) => { e.preventDefault(); setIsSignUp(!isSignUp); setError(''); }} style={{color: 'var(--primary-color)', textDecoration: 'none'}}>
+                        {isSignUp ? 'Log In' : 'Sign Up'}
+                    </a>
+                </p>
             </div>
         </div>
     );
@@ -381,8 +433,8 @@ const PrivacyPolicyPage: React.FC<{ onBack: () => void; }> = ({ onBack }) => (
 
 // --- Bookkeeping App Component ---
 const App: React.FC = () => {
-  const [authState, setAuthState] = useState<AuthState>('loggedOut');
-  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [authState, setAuthState] = useState<AuthState>('loading');
+  const [user, setUser] = useState<User | null>(null);
   const [inputText, setInputText] = useState<string>('');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -390,7 +442,7 @@ const App: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransaction[]>([]);
   const [chartOfAccounts, setChartOfAccounts] = useState<Account[]>(initialChartOfAccounts);
-  const [activeProjectId, setActiveProjectId] = useState<number | undefined>(undefined);
+  const [activeProjectId, setActiveProjectId] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
@@ -419,6 +471,63 @@ const App: React.FC = () => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
     useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+            if (currentUser) {
+                setUser(currentUser);
+                setAuthState('loggedIn');
+                // Fetch all user data from Firestore
+                const dataPromises = [
+                    getCollectionData<Transaction>(currentUser.uid, 'transactions'),
+                    getCollectionData<Invoice>(currentUser.uid, 'invoices'),
+                    getCollectionData<Bill>(currentUser.uid, 'bills'),
+                    getCollectionData<Project>(currentUser.uid, 'projects'),
+                    getCollectionData<RecurringTransaction>(currentUser.uid, 'recurringTransactions'),
+                    getCollectionData<Account>(currentUser.uid, 'chartOfAccounts'),
+                    getDoc(doc(db, 'users', currentUser.uid)),
+                ];
+                const [
+                    fetchedTransactions, fetchedInvoices, fetchedBills, fetchedProjects,
+                    fetchedRecurring, fetchedCOA, userSettingsDoc
+                ] = await Promise.all(dataPromises);
+
+                setTransactions((fetchedTransactions as Transaction[]).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+                setInvoices(fetchedInvoices as Invoice[]);
+                setBills(fetchedBills as Bill[]);
+                setProjects(fetchedProjects as Project[]);
+                setRecurringTransactions(fetchedRecurring as RecurringTransaction[]);
+                setChartOfAccounts((fetchedCOA as Account[]).length > 0 ? (fetchedCOA as Account[]) : initialChartOfAccounts);
+
+                if (userSettingsDoc.exists()) {
+                    const settings = userSettingsDoc.data();
+                    if(settings.quarterlyPayments) setQuarterlyPayments(settings.quarterlyPayments);
+                    if(settings.seTaxRate) setSeTaxRate(settings.seTaxRate);
+                    if(settings.salesTaxRate) setSalesTaxRate(settings.salesTaxRate);
+                    if(settings.irsMileageRate) setIrsMileageRate(settings.irsMileageRate);
+                }
+
+            } else {
+                setUser(null);
+                setAuthState('loggedOut');
+                // Reset all state
+                setTransactions([]); setInvoices([]); setBills([]); setProjects([]);
+                setRecurringTransactions([]); setChartOfAccounts(initialChartOfAccounts);
+                setQuarterlyPayments({q1:0, q2:0, q3:0, q4:0});
+            }
+        });
+        return () => unsubscribe();
+    }, []);
+
+    useEffect(() => {
+        if (!user) return;
+        const userSettings = { quarterlyPayments, seTaxRate, salesTaxRate, irsMileageRate };
+        const timer = setTimeout(() => {
+            setDoc(doc(db, 'users', user.uid), userSettings, { merge: true });
+        }, 2000); // Debounce settings save
+        return () => clearTimeout(timer);
+    }, [quarterlyPayments, seTaxRate, salesTaxRate, irsMileageRate, user]);
+
+
+    useEffect(() => {
         // If one of the billing sub-pages is active, ensure the parent menu is open.
         if (['ar', 'ap', 'recurring'].includes(activeTab)) {
             setIsBillingOpen(true);
@@ -427,30 +536,31 @@ const App: React.FC = () => {
 
   // Effect to generate recurring transactions on load
     useEffect(() => {
-        if (hasCheckedRecurring.current || recurringTransactions.length === 0) {
+        if (!user || hasCheckedRecurring.current || recurringTransactions.length === 0) {
             return;
         }
 
         const today = CURRENT_DATE;
-        today.setHours(0, 0, 0, 0); // Normalize to the start of the day for accurate comparison
+        today.setHours(0, 0, 0, 0);
 
-        const newTransactions: Transaction[] = [];
-        const updatedRecurring = recurringTransactions.map(rec => {
+        const newTransactions: Omit<Transaction, 'id'>[] = [];
+        const updatedRecurring: RecurringTransaction[] = [];
+        let needsUpdate = false;
+
+        recurringTransactions.forEach(rec => {
             let recurringCopy = { ...rec };
             let nextDueDate = new Date(recurringCopy.nextDueDate);
             nextDueDate.setHours(0, 0, 0, 0);
 
-            // Keep generating transactions as long as the due date is in the past or today
             while (nextDueDate <= today) {
-                const generatedTx: Transaction = {
+                needsUpdate = true;
+                const generatedTx: Omit<Transaction, 'id'> = {
                     ...recurringCopy.details,
-                    id: Date.now() + Math.random(),
-                    date: recurringCopy.nextDueDate, // Use the due date as the transaction date
+                    date: recurringCopy.nextDueDate,
                     reconciled: false,
                 };
                 newTransactions.push(generatedTx);
 
-                // Calculate the next due date for the next iteration
                 const currentDueDate = new Date(recurringCopy.nextDueDate);
                 switch (recurringCopy.frequency) {
                     case 'daily': currentDueDate.setDate(currentDueDate.getDate() + 1); break;
@@ -462,20 +572,38 @@ const App: React.FC = () => {
                 nextDueDate = new Date(recurringCopy.nextDueDate);
                 nextDueDate.setHours(0,0,0,0);
             }
-            return recurringCopy;
+            updatedRecurring.push(recurringCopy);
         });
 
-        if (newTransactions.length > 0) {
-            setTransactions(prev => [...newTransactions, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-            setRecurringTransactions(updatedRecurring);
+        if (needsUpdate && user) {
+            (async () => {
+                const batch = writeBatch(db);
+                const finalNewTxs: Transaction[] = [];
+
+                newTransactions.forEach(tx => {
+                    const docRef = doc(collection(db, 'users', user.uid, 'transactions'));
+                    batch.set(docRef, tx);
+                    finalNewTxs.push({ ...tx, id: docRef.id });
+                });
+
+                updatedRecurring.forEach(rec => {
+                    const docRef = doc(db, 'users', user.uid, 'recurringTransactions', rec.id);
+                    batch.update(docRef, { nextDueDate: rec.nextDueDate });
+                });
+
+                await batch.commit();
+
+                setTransactions(prev => [...finalNewTxs, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+                setRecurringTransactions(updatedRecurring);
+            })();
         }
 
-        hasCheckedRecurring.current = true; // Ensure this logic only runs once per session
-    }, [recurringTransactions]);
+        hasCheckedRecurring.current = true;
+    }, [recurringTransactions, user]);
 
 
   const handleProcessTransaction = async () => {
-    if (!inputText.trim() || isLoading) return;
+    if (!inputText.trim() || isLoading || !user) return;
 
     setIsLoading(true);
     setError(null);
@@ -526,76 +654,63 @@ const App: React.FC = () => {
       });
 
       const responseText = response.text?.trim();
-      if (!responseText) {
-          throw new Error("The AI returned an empty response. This could be due to content filtering or an unclear prompt.");
-      }
+      if (!responseText) throw new Error("The AI returned an empty response.");
+      
+      const parsedTransactions = JSON.parse(responseText) as Omit<Transaction, 'id'>[];
+      
+      const batch = writeBatch(db);
+      const tempNewTxs: Transaction[] = [];
+      const tempNewBills: Bill[] = [];
+      const tempNewInvoices: Invoice[] = [];
 
-      let parsedTransactions;
-      try {
-        parsedTransactions = JSON.parse(responseText) as Omit<Transaction, 'id'>[];
-      } catch (parseError) {
-        console.error("Failed to parse AI JSON response:", responseText, parseError);
-        throw new Error("The AI returned data in an unexpected format. Please try rephrasing your input.");
-      }
+      parsedTransactions.forEach(t => {
+          const newTxData = {...t, reconciled: false, projectId: activeProjectId, classification: t.classification || 'business' };
+          const txDocRef = doc(collection(db, 'users', user.uid, 'transactions'));
+          batch.set(txDocRef, newTxData);
+          const newTxWithId = { ...newTxData, id: txDocRef.id };
+          tempNewTxs.push(newTxWithId);
 
-      const newTransactionsWithIds = parsedTransactions.map(t => ({...t, id: Date.now() + Math.random(), reconciled: false, projectId: activeProjectId, classification: t.classification || 'business' }));
-
-      const newBills: Bill[] = [];
-      const newInvoices: Invoice[] = [];
-
-      newTransactionsWithIds.forEach(t => {
-          const isBill = t.journal.some(j => j.account === 'Accounts Payable' && j.credit);
-          const isInvoice = t.journal.some(j => j.account === 'Accounts Receivable' && j.debit);
+          const isBill = newTxWithId.journal.some(j => j.account === 'Accounts Payable' && j.credit);
+          const isInvoice = newTxWithId.journal.some(j => j.account === 'Accounts Receivable' && j.debit);
 
           if (isBill) {
-              const dueDate = new Date(t.date);
-              dueDate.setDate(dueDate.getDate() + 30); // Assume Net 30 for due date
-              newBills.push({
-                  id: Date.now() + Math.random(),
-                  vendor: t.vendor,
-                  billNumber: `B-${Date.now()}`, // Simple unique bill number
-                  billDate: t.date,
-                  dueDate: dueDate.toISOString().split('T')[0],
-                  amount: t.amount,
-                  status: 'Open',
-                  relatedTransactionId: t.id
-              });
+              const dueDate = new Date(newTxWithId.date);
+              dueDate.setDate(dueDate.getDate() + 30);
+              const billDocRef = doc(collection(db, 'users', user.uid, 'bills'));
+              const newBillData = {
+                  vendor: newTxWithId.vendor, billNumber: `B-${Date.now()}`, billDate: newTxWithId.date,
+                  dueDate: dueDate.toISOString().split('T')[0], amount: newTxWithId.amount, status: 'Open' as 'Open',
+                  relatedTransactionId: newTxWithId.id
+              };
+              batch.set(billDocRef, newBillData);
+              tempNewBills.push({ ...newBillData, id: billDocRef.id });
           }
           if (isInvoice) {
-              const dueDate = new Date(t.date);
-              dueDate.setDate(dueDate.getDate() + 30); // Assume Net 30
-              newInvoices.push({
-                  id: Date.now() + Math.random(),
-                  customer: t.vendor,
-                  invoiceNumber: `INV-${Date.now()}`,
-                  invoiceDate: t.date,
-                  dueDate: dueDate.toISOString().split('T')[0],
-                  amount: t.amount,
-                  status: 'Sent',
-                  relatedTransactionId: t.id,
-                  taxable: false, // Defaulting to false as AI doesn't provide this.
-              });
+              const dueDate = new Date(newTxWithId.date);
+              dueDate.setDate(dueDate.getDate() + 30);
+              const invDocRef = doc(collection(db, 'users', user.uid, 'invoices'));
+              const newInvData = {
+                  customer: newTxWithId.vendor, invoiceNumber: `INV-${Date.now()}`, invoiceDate: newTxWithId.date,
+                  dueDate: dueDate.toISOString().split('T')[0], amount: newTxWithId.amount, status: 'Sent' as 'Sent',
+                  relatedTransactionId: newTxWithId.id, taxable: false,
+              };
+              batch.set(invDocRef, newInvData);
+              tempNewInvoices.push({ ...newInvData, id: invDocRef.id });
           }
       });
+      
+      await batch.commit();
 
-      setTransactions(prev => [...newTransactionsWithIds, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-      if (newBills.length > 0) {
-        setBills(prev => [...newBills, ...prev]);
-      }
-      if (newInvoices.length > 0) {
-        setInvoices(prev => [...newInvoices, ...prev]);
-      }
+      setTransactions(prev => [...tempNewTxs, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      if (tempNewBills.length > 0) setBills(prev => [...tempNewBills, ...prev]);
+      if (tempNewInvoices.length > 0) setInvoices(prev => [...tempNewInvoices, ...prev]);
       setInputText('');
 
     } catch (e: any) {
       console.error(e);
       let friendlyMessage = "An unexpected error occurred. Please try again.";
       if (e instanceof Error) {
-          if (e.message.includes("API key")) {
-              friendlyMessage = "There appears to be a configuration issue with the AI service.";
-          } else {
-              friendlyMessage = e.message;
-          }
+          friendlyMessage = e.message.includes("API key") ? "Configuration issue with the AI service." : e.message;
       }
       setError(`Failed to process transaction. ${friendlyMessage}`);
     } finally {
@@ -603,230 +718,216 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDeleteTransaction = (id: number) => {
-    if (window.confirm('Are you sure you want to delete this transaction?')) {
-        setTransactions(prev => prev.filter(t => t.id !== id));
+  const handleDeleteTransaction = async (id: string) => {
+    if (window.confirm('Are you sure you want to delete this transaction?') && user) {
+        try {
+            await deleteDoc(doc(db, 'users', user.uid, 'transactions', id));
+            setTransactions(prev => prev.filter(t => t.id !== id));
+        } catch (e) { console.error(e); setError('Failed to delete transaction.'); }
     }
   };
 
-    const handleToggleTransactionClassification = (transactionId: number) => {
-        setTransactions(prev =>
-            prev.map(t =>
-                t.id === transactionId
-                    ? { ...t, classification: t.classification === 'business' ? 'personal' : 'business' }
-                    : t
-            )
-        );
-    };
+  const handleToggleTransactionClassification = async (transactionId: string) => {
+    if (!user) return;
+    const tx = transactions.find(t => t.id === transactionId);
+    if (!tx) return;
+    const newClassification = tx.classification === 'business' ? 'personal' : 'business';
+    try {
+        await updateDoc(doc(db, 'users', user.uid, 'transactions', transactionId), { classification: newClassification });
+        setTransactions(prev => prev.map(t => t.id === transactionId ? { ...t, classification: newClassification } : t));
+    } catch (e) { console.error(e); setError('Failed to update transaction classification.'); }
+  };
 
   const handleOpenEditModal = (transaction: Transaction) => {
     setEditingTransaction(transaction);
     setIsEditModalOpen(true);
   };
 
-  const handleUpdateTransaction = (updatedTransaction: Transaction) => {
-    setTransactions(prev => prev.map(t => t.id === updatedTransaction.id ? updatedTransaction : t).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-    setIsEditModalOpen(false);
-    setEditingTransaction(null);
+  const handleUpdateTransaction = async (updatedTransaction: Transaction) => {
+    if (!user) return;
+    try {
+        const { id, ...dataToUpdate } = updatedTransaction;
+        await setDoc(doc(db, 'users', user.uid, 'transactions', id), dataToUpdate);
+        setTransactions(prev => prev.map(t => t.id === id ? updatedTransaction : t).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        setIsEditModalOpen(false);
+        setEditingTransaction(null);
+    } catch (e) { console.error(e); setError('Failed to update transaction.'); }
   };
 
-  const handleReconcile = () => {
-      if (!bankStatementData.trim()) {
-          alert("Please paste your bank statement data.");
-          return;
-      }
+  const handleReconcile = () => { /* This remains a client-side only feature for now */ };
 
-      const bankEntries: BankStatementEntry[] = bankStatementData.trim().split('\n').map(line => {
-          const [date, description, amount] = line.split(',');
-          return { date, description, amount: parseFloat(amount) };
-      }).filter(entry => !isNaN(entry.amount));
-
-      const ledgerTransactions = [...transactions];
-      const matched: Transaction[] = [];
-      const unmatchedLedger: Transaction[] = [];
-      const unmatchedBank: BankStatementEntry[] = [];
-
-      const bankEntriesCopy = [...bankEntries];
-
-      ledgerTransactions.forEach(ledgerTx => {
-          const amountToMatch = ledgerTx.transactionType === 'income' ? ledgerTx.amount : -ledgerTx.amount;
-          const matchIndex = bankEntriesCopy.findIndex(bankTx => bankTx.amount === amountToMatch);
-
-          if (matchIndex !== -1) {
-              matched.push({...ledgerTx, reconciled: true});
-              bankEntriesCopy.splice(matchIndex, 1);
-          } else {
-              unmatchedLedger.push(ledgerTx);
-          }
-      });
-
-      setReconciliationResults({
-          matched,
-          unmatchedLedger,
-          unmatchedBank: bankEntriesCopy
-      });
-  };
-
-  const handleCreateInvoice = (invoiceData: Omit<Invoice, 'id' | 'status' | 'relatedTransactionId'>) => {
-    const transactionId = Date.now() + Math.random();
-    const newTransaction: Transaction = {
-        id: transactionId,
-        vendor: invoiceData.customer,
-        amount: invoiceData.amount,
-        currency: 'USD', // Assuming USD for now
-        date: invoiceData.invoiceDate,
-        category: 'Sales', // General category
-        transactionType: 'income',
-        classification: 'business',
-        journal: [
-            { account: 'Accounts Receivable', debit: invoiceData.amount },
-            { account: 'Sales Revenue', credit: invoiceData.amount }
-        ],
+  const handleCreateInvoice = async (invoiceData: Omit<Invoice, 'id' | 'status' | 'relatedTransactionId'>) => {
+    if (!user) return;
+    const txDocRef = doc(collection(db, 'users', user.uid, 'transactions'));
+    const newTransactionData: Omit<Transaction, 'id'> = {
+        vendor: invoiceData.customer, amount: invoiceData.amount, currency: 'USD', date: invoiceData.invoiceDate,
+        category: 'Sales', transactionType: 'income', classification: 'business',
+        journal: [{ account: 'Accounts Receivable', debit: invoiceData.amount }, { account: 'Sales Revenue', credit: invoiceData.amount }],
         reconciled: false
     };
+    
+    const invDocRef = doc(collection(db, 'users', user.uid, 'invoices'));
+    const newInvoiceData: Omit<Invoice, 'id'> = { ...invoiceData, status: 'Draft', relatedTransactionId: txDocRef.id };
 
-    const newInvoice: Invoice = {
-        ...invoiceData,
-        id: Date.now() + Math.random(),
-        status: 'Draft',
-        relatedTransactionId: transactionId
-    };
+    try {
+        const batch = writeBatch(db);
+        batch.set(txDocRef, newTransactionData);
+        batch.set(invDocRef, newInvoiceData);
+        await batch.commit();
 
-    setTransactions(prev => [newTransaction, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-    setInvoices(prev => [newInvoice, ...prev]);
-    setIsInvoiceModalOpen(false);
+        setTransactions(prev => [{...newTransactionData, id: txDocRef.id}, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        setInvoices(prev => [{...newInvoiceData, id: invDocRef.id}, ...prev]);
+        setIsInvoiceModalOpen(false);
+    } catch (e) { console.error(e); setError('Failed to create invoice.'); }
   };
 
-  const handleUpdateInvoiceStatus = (invoiceId: number, status: 'Sent' | 'Paid') => {
+  const handleUpdateInvoiceStatus = async (invoiceId: string, status: 'Sent' | 'Paid') => {
+      if (!user) return;
       const invoice = invoices.find(inv => inv.id === invoiceId);
       if (!invoice) return;
 
-      if (status === 'Paid' && invoice.status !== 'Paid') {
-          const settlementTransaction: Transaction = {
-              id: Date.now() + Math.random(),
-              vendor: invoice.customer,
-              amount: invoice.amount,
-              currency: 'USD',
-              date: CURRENT_DATE_ISO, // Today's date
-              category: 'Payment',
-              transactionType: 'income',
-              classification: 'business',
-              journal: [
-                  { account: 'Bank', debit: invoice.amount },
-                  { account: 'Accounts Receivable', credit: invoice.amount }
-              ],
-              reconciled: false
-          };
-          setTransactions(prev => [settlementTransaction, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-      }
-
-      setInvoices(prev => prev.map(inv => inv.id === invoiceId ? {...inv, status} : inv));
+      const batch = writeBatch(db);
+      try {
+          if (status === 'Paid' && invoice.status !== 'Paid') {
+              const paymentTxRef = doc(collection(db, 'users', user.uid, 'transactions'));
+              const settlementTransactionData: Omit<Transaction, 'id'> = {
+                  vendor: invoice.customer, amount: invoice.amount, currency: 'USD', date: CURRENT_DATE_ISO,
+                  category: 'Payment', transactionType: 'income', classification: 'business',
+                  journal: [{ account: 'Bank', debit: invoice.amount }, { account: 'Accounts Receivable', credit: invoice.amount }],
+                  reconciled: false
+              };
+              batch.set(paymentTxRef, settlementTransactionData);
+              setTransactions(prev => [{...settlementTransactionData, id: paymentTxRef.id}, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+          }
+          batch.update(doc(db, 'users', user.uid, 'invoices', invoiceId), { status });
+          await batch.commit();
+          setInvoices(prev => prev.map(inv => inv.id === invoiceId ? {...inv, status} : inv));
+      } catch (e) { console.error(e); setError('Failed to update invoice status.'); }
   };
 
-  const handleDeleteInvoice = (invoiceId: number) => {
-    if (window.confirm('Are you sure you want to delete this invoice and its related transaction?')) {
+  const handleDeleteInvoice = async (invoiceId: string) => {
+    if (window.confirm('Are you sure you want to delete this invoice and its related transaction?') && user) {
         const invoiceToDelete = invoices.find(inv => inv.id === invoiceId);
         if (invoiceToDelete) {
-            setTransactions(prev => prev.filter(t => t.id !== invoiceToDelete.relatedTransactionId));
-            setInvoices(prev => prev.filter(inv => inv.id !== invoiceId));
+            try {
+                const batch = writeBatch(db);
+                batch.delete(doc(db, 'users', user.uid, 'transactions', invoiceToDelete.relatedTransactionId));
+                batch.delete(doc(db, 'users', user.uid, 'invoices', invoiceId));
+                await batch.commit();
+                setTransactions(prev => prev.filter(t => t.id !== invoiceToDelete.relatedTransactionId));
+                setInvoices(prev => prev.filter(inv => inv.id !== invoiceId));
+            } catch (e) { console.error(e); setError('Failed to delete invoice.'); }
         }
     }
   };
 
-    const handleCreateBill = (billData: Omit<Bill, 'id' | 'status' | 'relatedTransactionId'>) => {
-        const transactionId = Date.now() + Math.random();
-        // Default to a generic expense account, user can edit later.
+  const handleCreateBill = async (billData: Omit<Bill, 'id' | 'status' | 'relatedTransactionId'>) => {
+        if (!user) return;
         const expenseAccount = 'Miscellaneous Expense';
-        const newTransaction: Transaction = {
-            id: transactionId,
-            vendor: billData.vendor,
-            amount: billData.amount,
-            currency: 'USD',
-            date: billData.billDate,
-            category: 'Bill',
-            transactionType: 'expense',
-            classification: 'business',
-            journal: [
-                { account: expenseAccount, debit: billData.amount },
-                { account: 'Accounts Payable', credit: billData.amount }
-            ],
+        const txDocRef = doc(collection(db, 'users', user.uid, 'transactions'));
+        const newTransactionData: Omit<Transaction, 'id'> = {
+            vendor: billData.vendor, amount: billData.amount, currency: 'USD', date: billData.billDate,
+            category: 'Bill', transactionType: 'expense', classification: 'business',
+            journal: [{ account: expenseAccount, debit: billData.amount }, { account: 'Accounts Payable', credit: billData.amount }],
             reconciled: false
         };
 
-        const newBill: Bill = {
-            ...billData,
-            id: Date.now() + Math.random(),
-            status: 'Open',
-            relatedTransactionId: transactionId
-        };
-
-        setTransactions(prev => [newTransaction, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-        setBills(prev => [newBill, ...prev]);
-        setIsBillModalOpen(false);
+        const billDocRef = doc(collection(db, 'users', user.uid, 'bills'));
+        const newBillData: Omit<Bill, 'id'> = { ...billData, status: 'Open', relatedTransactionId: txDocRef.id };
+        
+        try {
+            const batch = writeBatch(db);
+            batch.set(txDocRef, newTransactionData);
+            batch.set(billDocRef, newBillData);
+            await batch.commit();
+            setTransactions(prev => [{...newTransactionData, id: txDocRef.id}, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+            setBills(prev => [{...newBillData, id: billDocRef.id}, ...prev]);
+            setIsBillModalOpen(false);
+        } catch (e) { console.error(e); setError('Failed to create bill.'); }
     };
 
-    const handleUpdateBillStatus = (billId: number, status: 'Paid') => {
+    const handleUpdateBillStatus = async (billId: string, status: 'Paid') => {
+        if (!user) return;
         const bill = bills.find(b => b.id === billId);
         if (!bill || bill.status === 'Paid') return;
-
-        if (status === 'Paid') {
-            const paymentTransaction: Transaction = {
-                id: Date.now() + Math.random(),
-                vendor: bill.vendor,
-                amount: bill.amount,
-                currency: 'USD',
-                date: CURRENT_DATE_ISO,
-                category: 'Payment',
-                transactionType: 'expense',
-                classification: 'business',
-                journal: [
-                    { account: 'Accounts Payable', debit: bill.amount },
-                    { account: 'Bank', credit: bill.amount }
-                ],
+        
+        const batch = writeBatch(db);
+        try {
+            const paymentTxRef = doc(collection(db, 'users', user.uid, 'transactions'));
+            const paymentTransactionData: Omit<Transaction, 'id'> = {
+                vendor: bill.vendor, amount: bill.amount, currency: 'USD', date: CURRENT_DATE_ISO,
+                category: 'Payment', transactionType: 'expense', classification: 'business',
+                journal: [{ account: 'Accounts Payable', debit: bill.amount }, { account: 'Bank', credit: bill.amount }],
                 reconciled: false
             };
-            setTransactions(prev => [paymentTransaction, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-        }
-        setBills(prev => prev.map(b => b.id === billId ? { ...b, status } : b));
+            batch.set(paymentTxRef, paymentTransactionData);
+            batch.update(doc(db, 'users', user.uid, 'bills', billId), { status });
+            await batch.commit();
+
+            setTransactions(prev => [{...paymentTransactionData, id: paymentTxRef.id}, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+            setBills(prev => prev.map(b => b.id === billId ? { ...b, status } : b));
+        } catch (e) { console.error(e); setError('Failed to update bill status.'); }
     };
 
-    const handleDeleteBill = (billId: number) => {
-        if (window.confirm('Are you sure you want to delete this bill and its related transaction?')) {
-            const billToDelete = bills.find(b => b.id !== billId);
+    const handleDeleteBill = async (billId: string) => {
+        if (window.confirm('Are you sure you want to delete this bill and its related transaction?') && user) {
+            const billToDelete = bills.find(b => b.id === billId);
             if (billToDelete) {
-                setTransactions(prev => prev.filter(t => t.id !== billToDelete.relatedTransactionId));
-                setBills(prev => prev.filter(b => b.id !== billId));
+                try {
+                    const batch = writeBatch(db);
+                    batch.delete(doc(db, 'users', user.uid, 'transactions', billToDelete.relatedTransactionId));
+                    batch.delete(doc(db, 'users', user.uid, 'bills', billId));
+                    await batch.commit();
+                    setTransactions(prev => prev.filter(t => t.id !== billToDelete.relatedTransactionId));
+                    setBills(prev => prev.filter(b => b.id !== billId));
+                } catch (e) { console.error(e); setError('Failed to delete bill.'); }
             }
         }
     };
 
 
-  const handleAddProject = (projectName: string) => {
-    if (projectName.trim()) {
-        const newProject: Project = { id: Date.now(), name: projectName.trim() };
-        setProjects(prev => [...prev, newProject]);
+  const handleAddProject = async (projectName: string) => {
+    if (projectName.trim() && user) {
+        try {
+            const newProjectData = { name: projectName.trim() };
+            const docRef = await addDoc(collection(db, 'users', user.uid, 'projects'), newProjectData);
+            setProjects(prev => [...prev, { ...newProjectData, id: docRef.id }]);
+        } catch (e) { console.error(e); setError('Failed to add project.'); }
     }
   };
 
-  const handleDeleteProject = (projectId: number) => {
-    if (window.confirm('Are you sure you want to delete this project? This will not delete associated transactions.')) {
-        setProjects(prev => prev.filter(p => p.id !== projectId));
+  const handleDeleteProject = async (projectId: string) => {
+    if (window.confirm('Are you sure you want to delete this project? This will not delete associated transactions.') && user) {
+        try {
+            await deleteDoc(doc(db, 'users', user.uid, 'projects', projectId));
+            setProjects(prev => prev.filter(p => p.id !== projectId));
+        } catch (e) { console.error(e); setError('Failed to delete project.'); }
     }
   };
 
-  const handleAddRecurringTransaction = (newRecurring: Omit<RecurringTransaction, 'id'>) => {
-      setRecurringTransactions(prev => [...prev, { ...newRecurring, id: Date.now() }]);
+  const handleAddRecurringTransaction = async (newRecurring: Omit<RecurringTransaction, 'id'>) => {
+      if (!user) return;
+      try {
+          const docRef = await addDoc(collection(db, 'users', user.uid, 'recurringTransactions'), newRecurring);
+          setRecurringTransactions(prev => [...prev, { ...newRecurring, id: docRef.id }]);
+      } catch (e) { console.error(e); setError('Failed to add recurring transaction.'); }
   };
 
-  const handleDeleteRecurringTransaction = (id: number) => {
-      if (window.confirm('Are you sure you want to delete this recurring transaction schedule?')) {
-          setRecurringTransactions(prev => prev.filter(rt => rt.id !== id));
+  const handleDeleteRecurringTransaction = async (id: string) => {
+      if (window.confirm('Are you sure you want to delete this recurring transaction schedule?') && user) {
+          try {
+            await deleteDoc(doc(db, 'users', user.uid, 'recurringTransactions', id));
+            setRecurringTransactions(prev => prev.filter(rt => rt.id !== id));
+          } catch (e) { console.error(e); setError('Failed to delete recurring transaction.'); }
       }
   };
 
-  const handleAddAccount = (account: Account) => {
-    if (account.name.trim() && !chartOfAccounts.some(acc => acc.name.toLowerCase() === account.name.toLowerCase().trim())) {
-        setChartOfAccounts(prev => [...prev, account].sort((a,b) => a.name.localeCompare(b.name)));
+  const handleAddAccount = async (account: Account) => {
+    if (account.name.trim() && !chartOfAccounts.some(acc => acc.name.toLowerCase() === account.name.toLowerCase().trim()) && user) {
+        try {
+            await addDoc(collection(db, 'users', user.uid, 'chartOfAccounts'), account);
+            setChartOfAccounts(prev => [...prev, account].sort((a,b) => a.name.localeCompare(b.name)));
+        } catch (e) { console.error(e); setError('Failed to add account.'); }
     } else {
         alert("Account name must be unique.");
     }
@@ -1150,29 +1251,39 @@ const App: React.FC = () => {
     }
   }
 
-  const handleLogin = (email: string) => {
-      setUserEmail(email);
-      setAuthState('loggedIn');
+  const handleLogin = async (email: string, pass: string) => {
+      await signInWithEmailAndPassword(auth, email, pass);
+  };
+
+  const handleSignUp = async (email: string, pass: string) => {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+      const user = userCredential.user;
+      // Create initial data for the new user
+      const batch = writeBatch(db);
+      initialChartOfAccounts.forEach(account => {
+          const docRef = doc(collection(db, 'users', user.uid, 'chartOfAccounts'));
+          batch.set(docRef, account);
+      });
+      await batch.commit();
+      setChartOfAccounts(initialChartOfAccounts); // Set initial state locally
   };
 
   const handleLogout = () => {
-      setUserEmail(null);
-      setAuthState('loggedOut');
+      signOut(auth);
   };
+
+  if (authState === 'loading') {
+      return <div className="loading-fullscreen"></div>; // Replace with a proper loading spinner/UI
+  }
 
   if (authState === 'viewingPrivacy') {
       return <PrivacyPolicyPage onBack={() => setAuthState('loggedOut')} />;
   }
 
-  if (authState === 'loggedOut') {
-      return <LandingPage 
-          onLoginClick={() => setAuthState('loggingIn')}
-          onPrivacyClick={() => setAuthState('viewingPrivacy')}
-      />;
-  }
-
-  if (authState === 'loggingIn') {
-      return <LoginPage onLogin={handleLogin} />;
+  if (authState === 'loggedOut' || authState === 'loggingIn') {
+      return authState === 'loggedOut' ? 
+        <LandingPage onLoginClick={() => setAuthState('loggingIn')} onPrivacyClick={() => setAuthState('viewingPrivacy')}/> :
+        <LoginPage onLogin={handleLogin} onSignUp={handleSignUp} />;
   }
 
   return (
@@ -1185,7 +1296,7 @@ const App: React.FC = () => {
         />
        <div className="main-wrapper">
             <Header
-              userEmail={userEmail}
+              userEmail={user?.email || null}
               onLogout={handleLogout}
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
@@ -1209,6 +1320,13 @@ const App: React.FC = () => {
     </div>
   );
 };
+
+// --- Helper Functions ---
+async function getCollectionData<T extends DocumentData>(userId: string, collectionName: string): Promise<T[]> {
+    const q = query(collection(db, 'users', userId, collectionName));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as T));
+}
 
 // --- Icons ---
 const HomeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>;
@@ -1323,8 +1441,8 @@ const DashboardLogView: React.FC<{
     inputText: string,
     setInputText: (text: string) => void,
     isLoading: boolean,
-    activeProjectId: number | undefined,
-    setActiveProjectId: (id: number | undefined) => void,
+    activeProjectId: string | undefined,
+    setActiveProjectId: (id: string | undefined) => void,
     projects: Project[],
     handleProcessTransaction: () => void,
     error: string | null,
@@ -1333,8 +1451,8 @@ const DashboardLogView: React.FC<{
     handleReconcile: () => void,
     reconciliationResults: ReconciliationResults | null,
     handleOpenEditModal: (t: Transaction) => void,
-    handleDeleteTransaction: (id: number) => void,
-    handleToggleTransactionClassification: (id: number) => void,
+    handleDeleteTransaction: (id: string) => void,
+    handleToggleTransactionClassification: (id: string) => void,
     chartOfAccounts: Account[]
 }> = ({
     transactions, inputText, setInputText, isLoading, activeProjectId, setActiveProjectId, projects,
@@ -1403,7 +1521,7 @@ const DashboardLogView: React.FC<{
                 <select
                     id="project-select"
                     value={activeProjectId ?? ''}
-                    onChange={e => setActiveProjectId(e.target.value ? Number(e.target.value) : undefined)}
+                    onChange={e => setActiveProjectId(e.target.value ? e.target.value : undefined)}
                 >
                     <option value="">None</option>
                     {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -1529,7 +1647,7 @@ const DashboardPLView: React.FC<{
 
     const projectFinancials = useMemo(() => {
         const businessTransactions = transactions.filter(t => t.classification === 'business');
-        const projectsData: Record<number, { name: string; income: number; expenses: number }> = {};
+        const projectsData: Record<string, { name: string; income: number; expenses: number }> = {};
         projects.forEach(p => {
             projectsData[p.id] = { name: p.name, income: 0, expenses: 0 };
         });
@@ -1694,8 +1812,8 @@ const ARView: React.FC<{
     invoices: Invoice[],
     getAgingData: (items: (Invoice[] | Bill[]), type: 'receivable' | 'payable') => AgingData,
     setIsInvoiceModalOpen: (isOpen: boolean) => void,
-    handleUpdateInvoiceStatus: (id: number, status: 'Sent' | 'Paid') => void,
-    handleDeleteInvoice: (id: number) => void
+    handleUpdateInvoiceStatus: (id: string, status: 'Sent' | 'Paid') => void,
+    handleDeleteInvoice: (id: string) => void
 }> = ({ invoices, getAgingData, setIsInvoiceModalOpen, handleUpdateInvoiceStatus, handleDeleteInvoice }) => {
     const arAgingData = useMemo(() => getAgingData(invoices, 'receivable'), [invoices, getAgingData]);
     const sortedInvoices = useMemo(() => [...invoices].sort((a, b) => new Date(b.invoiceDate).getTime() - new Date(a.invoiceDate).getTime()), [invoices]);
@@ -1721,8 +1839,8 @@ const APView: React.FC<{
     bills: Bill[],
     getAgingData: (items: (Invoice[] | Bill[]), type: 'receivable' | 'payable') => AgingData,
     setIsBillModalOpen: (isOpen: boolean) => void,
-    handleUpdateBillStatus: (id: number, status: 'Paid') => void,
-    handleDeleteBill: (id: number) => void
+    handleUpdateBillStatus: (id: string, status: 'Paid') => void,
+    handleDeleteBill: (id: string) => void
 }> = ({ bills, getAgingData, setIsBillModalOpen, handleUpdateBillStatus, handleDeleteBill }) => {
     const apAgingData = useMemo(() => getAgingData(bills, 'payable'), [bills, getAgingData]);
     const sortedBills = useMemo(() => [...bills].sort((a, b) => new Date(b.billDate).getTime() - new Date(a.billDate).getTime()), [bills]);
@@ -1747,7 +1865,7 @@ const APView: React.FC<{
 const ProjectsView: React.FC<{
     projects: Project[],
     handleAddProject: (name: string) => void,
-    handleDeleteProject: (id: number) => void
+    handleDeleteProject: (id: string) => void
 }> = ({ projects, handleAddProject, handleDeleteProject }) => {
     const [newProjectName, setNewProjectName] = useState('');
 
@@ -1908,7 +2026,7 @@ const TaxAgentView: React.FC<{
 const RecurringView: React.FC<{
     recurringTransactions: RecurringTransaction[],
     handleAddRecurringTransaction: (rec: Omit<RecurringTransaction, 'id'>) => void,
-    handleDeleteRecurringTransaction: (id: number) => void
+    handleDeleteRecurringTransaction: (id: string) => void
 }> = ({ recurringTransactions, handleAddRecurringTransaction, handleDeleteRecurringTransaction }) => {
      // Dummy form state
     const [recDesc, setRecDesc] = useState('');
@@ -2002,11 +2120,12 @@ const RecurringView: React.FC<{
 
 const JournalView: React.FC<{ transactions: Transaction[] }> = ({ transactions }) => {
     const journalEntries = useMemo(() => {
-        const allEntries: (JournalEntry & { date: string, vendor: string, id: number })[] = [];
+        const allEntries: (JournalEntry & { date: string, vendor: string, txId: string, entryId: string })[] = [];
         transactions.forEach(t => {
             t.journal.forEach((j, index) => {
                 allEntries.push({
-                    id: t.id + index,
+                    txId: t.id,
+                    entryId: `${t.id}-${index}`,
                     date: t.date,
                     vendor: t.vendor,
                     account: j.account,
@@ -2034,8 +2153,8 @@ const JournalView: React.FC<{ transactions: Transaction[] }> = ({ transactions }
                     </tr>
                 </thead>
                 <tbody>
-                    {journalEntries.length > 0 ? journalEntries.map((entry, index) => (
-                        <tr key={`${entry.id}-${index}`}>
+                    {journalEntries.length > 0 ? journalEntries.map((entry) => (
+                        <tr key={entry.entryId}>
                             <td>{entry.date}</td>
                             <td>{entry.account}</td>
                             <td>{entry.vendor}</td>
@@ -2116,7 +2235,7 @@ const COAView: React.FC<{ chartOfAccounts: Account[], onAddAccount: (account: Ac
     );
 };
 
-const TransactionCard = ({ transaction, onEdit, onDelete, projects, onToggleClassification }: { transaction: Transaction, onEdit: (t: Transaction) => void, onDelete: (id: number) => void, projects: Project[], onToggleClassification: (id: number) => void }) => {
+const TransactionCard = ({ transaction, onEdit, onDelete, projects, onToggleClassification }: { transaction: Transaction, onEdit: (t: Transaction) => void, onDelete: (id: string) => void, projects: Project[], onToggleClassification: (id: string) => void }) => {
     const project = projects.find(p => p.id === transaction.projectId);
     return (
         <div className={`transaction-card ${transaction.transactionType} classification-${transaction.classification}`} key={transaction.id}>
@@ -2220,7 +2339,7 @@ const getDaysOverdue = (dueDateStr: string): number => {
 };
 
 
-const InvoiceCard = ({ invoice, onUpdateStatus, onDelete }: { invoice: Invoice, onUpdateStatus: (id: number, status: 'Sent' | 'Paid') => void, onDelete: (id: number) => void }) => {
+const InvoiceCard = ({ invoice, onUpdateStatus, onDelete }: { invoice: Invoice, onUpdateStatus: (id: string, status: 'Sent' | 'Paid') => void, onDelete: (id: string) => void }) => {
     const daysOverdue = getDaysOverdue(invoice.dueDate);
     const statusClass = invoice.status === 'Paid' ? 'paid' : (daysOverdue > 0 ? 'overdue' : (invoice.status === 'Sent' ? 'sent' : 'draft'));
     const statusText = invoice.status === 'Paid' ? 'Paid' : (daysOverdue > 0 ? `${daysOverdue} days overdue` : invoice.status);
@@ -2248,7 +2367,7 @@ const InvoiceCard = ({ invoice, onUpdateStatus, onDelete }: { invoice: Invoice, 
     );
 };
 
-const BillCard = ({ bill, onUpdateStatus, onDelete }: { bill: Bill, onUpdateStatus: (id: number, status: 'Paid') => void, onDelete: (id: number) => void }) => {
+const BillCard = ({ bill, onUpdateStatus, onDelete }: { bill: Bill, onUpdateStatus: (id: string, status: 'Paid') => void, onDelete: (id: string) => void }) => {
     const daysOverdue = getDaysOverdue(bill.dueDate);
     const statusClass = bill.status === 'Paid' ? 'paid' : (daysOverdue > 0 ? 'overdue' : 'open');
     const statusText = bill.status === 'Paid' ? 'Paid' : (daysOverdue > 0 ? `${daysOverdue} days overdue` : bill.status);
