@@ -444,15 +444,19 @@ body {
     color: var(--text-secondary-color);
 }
 .user-info button {
-    background-color: var(--background-color);
+    background-color: #fff;
     border: 1px solid var(--border-color);
     padding: 0.5rem 1rem;
     border-radius: 6px;
     cursor: pointer;
-    transition: background-color 0.2s;
+    color: var(--text-secondary-color);
+    font-weight: 500;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s;
 }
 .user-info button:hover {
-    background-color: var(--border-color);
+    background-color: var(--danger-color);
+    border-color: var(--danger-color);
+    color: #fff;
 }
 
 /* Search Results Dropdown */
@@ -836,7 +840,15 @@ textarea {
 .journal-header { font-weight: 600; color: var(--text-secondary-color); }
 .journal-debit, .journal-credit { text-align: right; }
 .transaction-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color); }
-.action-btn { background-color: transparent; border: 1px solid var(--border-color); border-radius: 6px; padding: 0.3rem 0.8rem; font-size: 0.8rem; cursor: pointer; color: var(--text-secondary-color); }
+.action-btn { background-color: transparent; border: 1px solid var(--border-color); border-radius: 6px; padding: 0.3rem 0.8rem; font-size: 0.8rem; cursor: pointer; color: var(--text-secondary-color); transition: background-color 0.2s, color 0.2s, border-color 0.2s; }
+.action-btn.delete-btn {
+    color: var(--danger-color);
+    border-color: var(--danger-color);
+}
+.action-btn.delete-btn:hover {
+    background-color: var(--danger-color);
+    color: white;
+}
 
 
 /* Projects View */
@@ -899,8 +911,13 @@ textarea {
     background: transparent;
     border: none;
     font-size: 1.5rem;
-    color: var(--text-secondary-color);
+    color: var(--danger-color);
+    opacity: 0.7;
     cursor: pointer;
+    transition: opacity 0.2s ease-in-out;
+}
+.delete-btn:hover {
+    opacity: 1;
 }
 
 /* --- Recurring View --- */
