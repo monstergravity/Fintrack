@@ -74,7 +74,7 @@ interface Financials {
   ytd: FinancialSummary; tax: TaxData;
 }
 type AgingData = { current: number; '1-30': number; '31-60': number; '61-90': number; '90+': number; total: number; };
-type ActiveTab = 'home' | 'transactions' | 'ar' | 'ap' | 'recurring' | 'journal' | 'coa' | 'projects' | 'tax';
+type ActiveTab = 'home' | 'transactions' | 'ar' | 'ap' | 'recurring' | 'journal' | 'coa' | 'projects' | 'knowledge' | 'tax';
 type SearchResults = {
     transactions: Transaction[];
     invoices: Invoice[];
@@ -473,6 +473,11 @@ const App: React.FC = () => {
   const [taxAgentResponse, setTaxAgentResponse] = useState<string>('');
   const [isTaxAgentLoading, setIsTaxAgentLoading] = useState<boolean>(false);
   const [quarterlyPayments, setQuarterlyPayments] = useState<QuarterlyPayments>({ q1: 0, q2: 0, q3: 0, q4: 0 });
+    
+  // State for Knowledge Base
+  const [knowledgeBaseAnswer, setKnowledgeBaseAnswer] = useState<string>('');
+  const [isKnowledgeBaseLoading, setIsKnowledgeBaseLoading] = useState<boolean>(false);
+
 
   const hasCheckedRecurring = useRef(false);
 
@@ -1019,6 +1024,58 @@ const App: React.FC = () => {
             setTaxQuestion('');
         }
     };
+    
+    const handleAskKnowledgeBase = async (question: string) => {
+        if (!question.trim() || isKnowledgeBaseLoading) return;
+
+        setIsKnowledgeBaseLoading(true);
+        setKnowledgeBaseAnswer('');
+
+        // Prepare a more detailed context for general financial questions
+        const projectProfitability = projects.map(p => {
+            const projectTxs = transactions.filter(t => t.projectId === p.id && t.classification === 'business');
+            const income = projectTxs.filter(t => t.transactionType === 'income').reduce((sum, t) => sum + t.amount, 0);
+            const expenses = projectTxs.filter(t => t.transactionType === 'expense').reduce((sum, t) => sum + t.amount, 0);
+            return `- Project '${p.name}': Income $${income.toFixed(2)}, Expenses $${expenses.toFixed(2)}, Net $${(income - expenses).toFixed(2)}`;
+        }).join('\n');
+
+        const topExpenses = Object.entries(financials.ytd.accountTotals)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 5)
+            .map(([name, amount]) => `- ${name}: $${amount.toFixed(2)}`)
+            .join('\n');
+
+        const financialContext = `
+            Current Financial Summary (Year-to-Date):
+            - Total Income: $${financials.ytd.income.toFixed(2)}
+            - Total Expenses: $${financials.ytd.expenses.toFixed(2)}
+            - Net Profit: $${financials.ytd.net.toFixed(2)}
+            
+            Top 5 Expense Categories:
+            ${topExpenses || 'No expenses recorded.'}
+
+            Project Profitability Summary:
+            ${projectProfitability || 'No projects with financial data.'}
+
+            User's Question: "${question}"
+        `;
+
+        try {
+            const response = await ai.models.generateContent({
+                model: "gemini-2.5-flash",
+                contents: financialContext,
+                config: {
+                    systemInstruction: "You are an expert financial analyst AI for small businesses. Your role is to answer questions based *only* on the provided financial data. Provide clear, concise, and data-driven answers. Format your answers clearly using headings or bullet points where appropriate. If the data doesn't support an answer, state that clearly. Do not provide financial advice or make up information not present in the summary.",
+                },
+            });
+            setKnowledgeBaseAnswer(response.text);
+        } catch (e) {
+            console.error(e);
+            setKnowledgeBaseAnswer("Sorry, I encountered an error while processing your request. Please try again.");
+        } finally {
+            setIsKnowledgeBaseLoading(false);
+        }
+    };
 
     const getAgingData = (items: (Invoice[] | Bill[]), type: 'receivable' | 'payable'): AgingData => {
         const aging: AgingData = {
@@ -1141,6 +1198,12 @@ const App: React.FC = () => {
                 handleAddProject={handleAddProject}
                 handleDeleteProject={handleDeleteProject}
             />;
+        case 'knowledge':
+            return <KnowledgeBaseView 
+                onAsk={handleAskKnowledgeBase}
+                answer={knowledgeBaseAnswer}
+                isLoading={isKnowledgeBaseLoading}
+            />;
         case 'tax':
             return <TaxAgentView
                 financials={financials}
@@ -1249,6 +1312,7 @@ const BillingIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" hei
 const JournalIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>;
 const ChartIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>;
 const ProjectsIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>;
+const KnowledgeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20v-2H6.5A2.5 2.5 0 0 1 4 12.5v-5A2.5 2.5 0 0 1 6.5 5H20V3H6.5A2.5 2.5 0 0 1 4 .5"/><path d="M2 3h2"/><path d="M2 7h2"/><path d="M2 11h2"/><path d="M2 15h2"/></svg>;
 const TaxIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.21 15.89-1.21-1.21a2 2 0 0 0-2.83 0l-1.18 1.18a2 2 0 0 1-2.83 0l-2.24-2.24a2 2 0 0 1 0-2.83l1.18-1.18a2 2 0 0 0 0-2.83l-1.21-1.21a2 2 0 0 0-2.83 0L2.1 12.89a2 2 0 0 0 0 2.83l8.49 8.48a2 2 0 0 0 2.83 0l8.48-8.48a2 2 0 0 0 0-2.83z"/><path d="M5.7 14.3 2.1 10.7a2 2 0 0 1 0-2.83l5.66-5.66a2 2 0 0 1 2.83 0l5.66 5.66a2 2 0 0 1 0 2.83l-5.66 5.66a2 2 0 0 1-2.83 0z"/></svg>;
 const SearchIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>;
 const ChevronDownIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>;
@@ -1285,6 +1349,7 @@ const Sidebar: React.FC<{
                     <li><a href="#" className={activeTab === 'journal' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setActiveTab('journal'); }}><JournalIcon /> Journal</a></li>
                     <li><a href="#" className={activeTab === 'coa' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setActiveTab('coa'); }}><ChartIcon /> Chart of Accounts</a></li>
                     <li><a href="#" className={activeTab === 'projects' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setActiveTab('projects'); }}><ProjectsIcon /> Projects</a></li>
+                    <li><a href="#" className={activeTab === 'knowledge' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setActiveTab('knowledge'); }}><KnowledgeIcon /> Knowledge Base</a></li>
                     <li><a href="#" className={activeTab === 'tax' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setActiveTab('tax'); }}><TaxIcon /> Tax Agent</a></li>
                 </ul>
             </nav>
@@ -1872,6 +1937,75 @@ const ProjectsView: React.FC<{
                     <div className="no-data"><p>No projects created yet.</p></div>
                  )}
             </div>
+        </div>
+    );
+};
+
+const KnowledgeBaseView: React.FC<{
+    onAsk: (question: string) => void;
+    answer: string;
+    isLoading: boolean;
+}> = ({ onAsk, answer, isLoading }) => {
+    const [customQuestion, setCustomQuestion] = useState('');
+    const suggestedQuestions = [
+        "What are my top 5 expenses this year?",
+        "How does my income compare to my expenses?",
+        "Which project is most profitable?",
+        "Provide a summary of my financial health.",
+    ];
+    
+    const handleAskQuestion = (question: string) => {
+        if (question.trim()) {
+            onAsk(question);
+            setCustomQuestion('');
+        }
+    }
+
+    return (
+        <div className="card knowledge-base-view">
+            <div className="module-header">
+                <h1>Knowledge Base</h1>
+            </div>
+            <p className="subtitle">Ask questions about your finances and get data-driven answers from our AI assistant.</p>
+            
+            <div className="suggested-questions">
+                <h4>Suggested Questions</h4>
+                <div className="questions-grid">
+                    {suggestedQuestions.map(q => (
+                        <button key={q} className="suggested-question-btn" onClick={() => handleAskQuestion(q)} disabled={isLoading}>
+                            {q}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <div className="custom-question-area">
+                <textarea 
+                    value={customQuestion}
+                    onChange={e => setCustomQuestion(e.target.value)}
+                    placeholder="Or, ask your own question here..."
+                    disabled={isLoading}
+                />
+                <button className="submit-button" onClick={() => handleAskQuestion(customQuestion)} disabled={isLoading || !customQuestion.trim()}>
+                    {isLoading ? <span className="loader" /> : 'Ask Question'}
+                </button>
+            </div>
+            
+            {(isLoading || answer) && (
+                <div className="answer-section">
+                    <h4>AI Response</h4>
+                    <div className="answer-display">
+                        {isLoading ? (
+                            <div className="loading-answer">
+                                <span className="loader" />
+                                <p>Analyzing your data...</p>
+                            </div>
+                        ) : (
+                            <pre>{answer}</pre>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
