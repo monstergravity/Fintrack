@@ -295,17 +295,6 @@ const LandingPage: React.FC<{ onLoginClick: () => void; onPrivacyClick: () => vo
                 <h1>Bookkeeping with Simplicity, Clarity, and Flexibility.</h1>
                 <p>Clario.ai uses AI to turn your complex financial data into a clear, manageable picture, so you can focus on what you do best.</p>
                 <button className="btn-primary btn-large" onClick={onLoginClick}>Get Started for Free</button>
-                <div className="product-hunt-badge">
-                    <a href="https://www.producthunt.com/products/clario-ai?embed=true&utm_source=badge-featured&utm_medium=badge&utm_source=badge-clario-ai" target="_blank" rel="noopener noreferrer">
-                        <img 
-                            src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1013087&theme=neutral&t=1757086507110" 
-                            alt="Clario.ai - One-click bookkeeping ai agent for to small business owners. | Product Hunt" 
-                            style={{width: '250px', height: '54px'}} 
-                            width="250" 
-                            height="54" 
-                        />
-                    </a>
-                </div>
             </section>
             <ProblemsSection />
             <SolutionsSection onCTAClick={onLoginClick} />
