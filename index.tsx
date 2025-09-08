@@ -106,7 +106,7 @@ type SearchResults = {
     bills: Bill[];
     projects: Project[];
 } | null;
-type AuthState = 'loading' |'loggedOut' | 'loggingIn' | 'loggedIn' | 'viewingPrivacy' | 'viewingPublicProfile';
+type AuthState = 'loading' |'loggedOut' | 'loggingIn' | 'loggedIn' | 'viewingPrivacy' | 'viewingPublicProfile' | 'expertSignup';
 
 
 // --- Default Data ---
@@ -155,7 +155,7 @@ const mockExperts: Expert[] = [
         hourlyRate: 125,
         rating: 4.9,
         reviewCount: 82,
-        bio: "With over 10 years of experience serving small businesses and startups, I specialize in tax planning, compliance, and financial strategy. My goal is to help you build a solid financial foundation so you can focus on growth. I'm proficient in QuickBooks, Xero, and multi-state tax law.",
+        bio: "With over 10 years of experience serving small businesses and startups, I specialize in tax planning, compliance, and financial strategy. My goal is to help you build a solid financial foundation so you can focus on growth. I'm proficient in Clario, Xero, and multi-state tax law.",
         services: [
             { name: 'Quarterly Tax Filing', description: 'Complete preparation and filing of your quarterly estimated taxes.', price: '$500 per quarter' },
             { name: 'Bookkeeping Cleanup', description: 'A one-time project to organize and reconcile up to 12 months of transactions.', price: '$1,200 one-time' },
@@ -322,13 +322,13 @@ const WhyClarioSection: React.FC<{ onCTAClick: () => void; }> = ({ onCTAClick })
 );
 
 
-const LandingPage: React.FC<{ onLoginClick: () => void; onPrivacyClick: () => void; onFindExpertClick: () => void; onViewExpertProfile: (id: string) => void; }> = ({ onLoginClick, onPrivacyClick, onFindExpertClick, onViewExpertProfile }) => (
+const LandingPage: React.FC<{ onLoginClick: () => void; onPrivacyClick: () => void; onFindExpertClick: () => void; onViewExpertProfile: (id: string) => void; onBecomeExpertClick: () => void; }> = ({ onLoginClick, onPrivacyClick, onFindExpertClick, onViewExpertProfile, onBecomeExpertClick }) => (
     <div className="landing-container">
         <header className="landing-header">
             <div className="logo">Clario.ai</div>
             <nav>
                 <button className="btn-secondary" onClick={onLoginClick}>Log In</button>
-                <button className="btn-primary" onClick={onLoginClick}>Become an Expert</button>
+                <button className="btn-primary" onClick={onBecomeExpertClick}>Become an Expert</button>
             </nav>
         </header>
         <main>
@@ -490,6 +490,171 @@ const PublicExpertProfilePage: React.FC<{ expert: Expert; onBack: () => void; on
     </div>
 );
 
+const ExpertSignupFlow: React.FC<{
+    onComplete: (data: Omit<Expert, 'id' | 'rating' | 'reviewCount' | 'reviews' | 'verified' | 'responseTime' | 'joinedDate' | 'profileImageUrl'>) => void;
+    onBackToHome: () => void;
+}> = ({ onComplete, onBackToHome }) => {
+    const [step, setStep] = useState(1);
+    const [formData, setFormData] = useState({
+        name: '',
+        title: '',
+        location: '',
+        hourlyRate: 75,
+        bio: '',
+        skills: [] as string[],
+        services: [{ name: '', description: '', price: '' }],
+    });
+    const [currentSkill, setCurrentSkill] = useState('');
+
+    const nextStep = () => setStep(s => s + 1);
+    const prevStep = () => setStep(s => s - 1);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleRateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setFormData(prev => ({...prev, hourlyRate: parseInt(e.target.value, 10) }));
+    }
+
+    const handleAddSkill = () => {
+        if (currentSkill && !formData.skills.includes(currentSkill)) {
+            setFormData(prev => ({...prev, skills: [...prev.skills, currentSkill]}));
+            setCurrentSkill('');
+        }
+    };
+
+    const handleRemoveSkill = (skillToRemove: string) => {
+        setFormData(prev => ({...prev, skills: prev.skills.filter(s => s !== skillToRemove)}));
+    };
+
+    const handleServiceChange = (index: number, field: 'name' | 'description' | 'price', value: string) => {
+        const newServices = [...formData.services];
+        newServices[index][field] = value;
+        setFormData(prev => ({ ...prev, services: newServices }));
+    };
+
+    const addService = () => {
+        setFormData(prev => ({ ...prev, services: [...prev.services, { name: '', description: '', price: '' }] }));
+    };
+    
+    const removeService = (index: number) => {
+        if (formData.services.length > 1) {
+            const newServices = formData.services.filter((_, i) => i !== index);
+            setFormData(prev => ({ ...prev, services: newServices }));
+        }
+    };
+    
+    const handleSubmit = () => {
+        onComplete(formData);
+    }
+    
+    const steps = [
+        { title: "Basic Info", id: 1 },
+        { title: "Profile Details", id: 2 },
+        { title: "Services", id: 3 },
+        { title: "Review", id: 4 },
+    ];
+
+    return (
+        <div className="signup-flow-container">
+            <header className="landing-header">
+                <div className="logo">Clario.ai Expert Signup</div>
+                <button className="btn-secondary" onClick={onBackToHome}>Cancel</button>
+            </header>
+            <div className="signup-flow-content">
+                <div className="progress-bar">
+                    {steps.map((s, index) => (
+                        <React.Fragment key={s.id}>
+                           <div className={`progress-step ${step >= s.id ? 'active' : ''}`}>
+                                <div className="step-circle">{s.id}</div>
+                                <span>{s.title}</span>
+                            </div>
+                           {index < steps.length - 1 && <div className={`progress-line ${step > s.id ? 'active' : ''}`} />}
+                        </React.Fragment>
+                    ))}
+                </div>
+                
+                <div className="signup-step-card">
+                    {step === 1 && (
+                        <div>
+                            <h2>Tell us about yourself</h2>
+                            <p>This information will be displayed on your public profile.</p>
+                            <div className="form-group"><label>Full Name</label><input type="text" name="name" value={formData.name} onChange={handleChange} placeholder="e.g., Jane Doe" required /></div>
+                            <div className="form-group"><label>Professional Title</label><input type="text" name="title" value={formData.title} onChange={handleChange} placeholder="e.g., Certified Public Accountant" required /></div>
+                            <div className="form-group"><label>Location</label><input type="text" name="location" value={formData.location} onChange={handleChange} placeholder="e.g., New York, NY" required /></div>
+                            <div className="form-group">
+                                <label>Your Hourly Rate (${formData.hourlyRate}/hr)</label>
+                                <input type="range" name="hourlyRate" min="25" max="300" step="5" value={formData.hourlyRate} onChange={handleRateChange} />
+                            </div>
+                        </div>
+                    )}
+                    {step === 2 && (
+                        <div>
+                            <h2>Showcase your expertise</h2>
+                            <p>Write a compelling bio and list the skills that make you stand out.</p>
+                            <div className="form-group"><label>Biography</label><textarea name="bio" value={formData.bio} onChange={handleChange} placeholder="Describe your experience, specialty, and what makes you a great partner for small businesses." rows={6} required /></div>
+                            <div className="form-group">
+                                <label>Skills</label>
+                                <div className="skill-input-group">
+                                    <input type="text" value={currentSkill} onChange={(e) => setCurrentSkill(e.target.value)} placeholder="e.g., Tax Planning" onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddSkill())} />
+                                    <button type="button" onClick={handleAddSkill}>Add</button>
+                                </div>
+                                <div className="skills-display">
+                                    {formData.skills.map(skill => (
+                                        <span key={skill} className="skill-tag">{skill} <button onClick={() => handleRemoveSkill(skill)}>&times;</button></span>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    {step === 3 && (
+                        <div>
+                            <h2>Define your services</h2>
+                            <p>List the specific services you offer. You can add fixed-price projects or describe your hourly offerings.</p>
+                            {formData.services.map((service, index) => (
+                                <div className="service-entry-form" key={index}>
+                                     <h4>Service #{index + 1}</h4>
+                                     <div className="form-group"><label>Service Name</label><input type="text" value={service.name} onChange={(e) => handleServiceChange(index, 'name', e.target.value)} placeholder="e.g., Monthly Bookkeeping" required /></div>
+                                     <div className="form-group"><label>Description</label><textarea value={service.description} onChange={(e) => handleServiceChange(index, 'description', e.target.value)} placeholder="Briefly describe what's included in this service." rows={3} required /></div>
+                                     <div className="form-group"><label>Price</label><input type="text" value={service.price} onChange={(e) => handleServiceChange(index, 'price', e.target.value)} placeholder="e.g., $450/month or $1,200 one-time" required /></div>
+                                     {formData.services.length > 1 && <button type="button" className="btn-remove-service" onClick={() => removeService(index)}>Remove Service</button>}
+                                </div>
+                            ))}
+                            <button type="button" className="btn-add-service" onClick={addService}>+ Add Another Service</button>
+                        </div>
+                    )}
+                    {step === 4 && (
+                        <div>
+                             <h2>Review your profile</h2>
+                             <p>This is how your profile will appear to clients. Go back to make any changes.</p>
+                             <div className="profile-preview-card">
+                                 <ExpertProfileLayout expert={{
+                                     ...formData,
+                                     id: 'preview',
+                                     profileImageUrl: 'https://i.pravatar.cc/150?img=10', // Placeholder
+                                     rating: 0,
+                                     reviewCount: 0,
+                                     reviews: [],
+                                     verified: false,
+                                     responseTime: 'New Expert!',
+                                     joinedDate: new Date().toISOString()
+                                 }} onHire={() => {}} isPublic={true} />
+                             </div>
+                        </div>
+                    )}
+                     <div className="signup-navigation">
+                        {step > 1 && <button className="btn-secondary" onClick={prevStep}>Previous Step</button>}
+                        {step < 4 && <button className="btn-primary" onClick={nextStep}>Next Step</button>}
+                        {step === 4 && <button className="btn-primary" onClick={handleSubmit}>Submit Application</button>}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 // --- Bookkeeping App Component ---
 const App: React.FC = () => {
@@ -516,7 +681,7 @@ const App: React.FC = () => {
   const [selectedPeriod, setSelectedPeriod] = useState<'q1' | 'q2' | 'q3' | 'q4' | 'ytd'>('ytd');
   const [isBillingOpen, setIsBillingOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [experts] = useState<Expert[]>(mockExperts);
+  const [experts, setExperts] = useState<Expert[]>(mockExperts);
   const [viewingExpertId, setViewingExpertId] = useState<string | null>(null);
 
 
@@ -1212,6 +1377,26 @@ const App: React.FC = () => {
         setIsHireModalOpen(false);
     };
 
+    const handleCompleteExpertSignup = (data: Omit<Expert, 'id' | 'rating' | 'reviewCount' | 'reviews' | 'verified' | 'responseTime' | 'joinedDate' | 'profileImageUrl'>) => {
+        const newExpert: Expert = {
+            ...data,
+            id: crypto.randomUUID(),
+            rating: 0,
+            reviewCount: 0,
+            reviews: [],
+            verified: false,
+            responseTime: 'New Expert!',
+            joinedDate: new Date().toISOString(),
+            profileImageUrl: `https://i.pravatar.cc/150?img=${Math.floor(Math.random() * 70)}`, // Random image
+        };
+        setExperts(prev => [newExpert, ...prev]);
+        
+        // For demo purposes, we'll log them in and take them to the expert list
+        // In a real app, this would involve creating a user account
+        setAuthState('loggedIn');
+        setActiveTab('findExperts');
+    };
+
   const renderContent = () => {
     if (viewingExpertId) {
         const expert = experts.find(e => e.id === viewingExpertId);
@@ -1359,6 +1544,10 @@ const App: React.FC = () => {
       return <PrivacyPolicyPage onBack={() => setAuthState(user ? 'loggedIn' : 'loggedOut')} />;
   }
 
+  if (authState === 'expertSignup') {
+        return <ExpertSignupFlow onComplete={handleCompleteExpertSignup} onBackToHome={() => setAuthState('loggedOut')} />;
+  }
+  
   if (authState === 'loggedOut' || authState === 'loggingIn') {
       const handleFindExpertClick = () => {
           setAuthState('loggingIn');
@@ -1369,6 +1558,7 @@ const App: React.FC = () => {
             onPrivacyClick={() => setAuthState('viewingPrivacy')} 
             onFindExpertClick={handleFindExpertClick}
             onViewExpertProfile={handleViewPublicProfile}
+            onBecomeExpertClick={() => setAuthState('expertSignup')}
         /> :
         <LoginPage onLogin={handleLogin} onSignUp={handleSignUp} />;
   }
@@ -2949,7 +3139,10 @@ const ExpertCard: React.FC<{ expert: Expert, onViewProfile: () => void }> = ({ e
         <div className="expert-card-header">
             <img src={expert.profileImageUrl} alt={expert.name} className="expert-avatar" />
             <div className="expert-info">
-                <h3 className="expert-name">{expert.name}</h3>
+                <div className="expert-name-row">
+                    <h3 className="expert-name">{expert.name}</h3>
+                    {expert.verified && <span className="verified-badge" title="Identity Verified"><CheckCircleIcon /></span>}
+                </div>
                 <p className="expert-title">{expert.title}</p>
                 <div className="expert-rating">
                     <StarIcon filled={true} /> 
@@ -3013,7 +3206,10 @@ const ExpertProfileLayout: React.FC<{ expert: Expert, onHire: () => void, isPubl
                 <div className="profile-header card">
                     <img src={expert.profileImageUrl} alt={expert.name} className="profile-avatar" />
                     <div className="profile-header-info">
-                        <h1>{expert.name}</h1>
+                        <div className="profile-name-row">
+                            <h1>{expert.name}</h1>
+                            {expert.verified && <span className="verified-badge-large" title="Identity Verified"><CheckCircleIcon /> Verified</span>}
+                        </div>
                         <p className="profile-title">{expert.title}</p>
                         <p className="profile-location">{expert.location}</p>
                         <div className="profile-rating">

@@ -1127,6 +1127,9 @@ textarea {
 .stars-container { display: flex; align-items: center; gap: 0.5rem; }
 .stars { display: flex; color: var(--warning-color); }
 .review-count { font-size: 0.9rem; color: var(--text-secondary-color); }
+.expert-name-row { display: flex; align-items: center; gap: 0.5rem; }
+.verified-badge { color: var(--success-color); display: flex; align-items: center; }
+.verified-badge svg { width: 16px; height: 16px; }
 
 .back-button { background: none; border: none; color: var(--primary-color); font-size: 1rem; cursor: pointer; margin-bottom: 1.5rem; }
 .expert-profile-view { max-width: 1200px; margin: 0 auto; }
@@ -1142,7 +1145,23 @@ textarea {
 .profile-header { display: flex; gap: 1.5rem; align-items: center; }
 .profile-avatar { width: 100px; height: 100px; border-radius: 50%; }
 .profile-header-info { flex-grow: 1; }
+.profile-name-row { display: flex; align-items: center; gap: 0.75rem; }
 .profile-header-info h1 { font-size: 2rem; margin-bottom: 0.25rem; }
+.verified-badge-large {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    background-color: var(--primary-light);
+    color: var(--primary-color);
+}
+.verified-badge-large svg {
+    width: 16px;
+    height: 16px;
+}
 .profile-title { font-size: 1.1rem; color: var(--text-secondary-color); }
 .profile-location { font-size: 0.9rem; color: var(--text-secondary-color); margin: 0.5rem 0; }
 .profile-rating { margin-top: 0.5rem; }
@@ -1214,6 +1233,154 @@ textarea {
 .review-rating { margin-left: auto; }
 .review-comment { font-style: italic; color: var(--text-secondary-color); }
 
+/* --- Expert Signup Flow --- */
+.signup-flow-container {
+    width: 100%;
+    background-color: var(--background-color);
+}
+.signup-flow-content {
+    max-width: 800px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+}
+.progress-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2.5rem;
+}
+.progress-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-secondary-color);
+}
+.progress-step .step-circle {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px solid var(--border-color);
+    background-color: #fff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+.progress-step span {
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+.progress-step.active .step-circle {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    color: #fff;
+}
+.progress-step.active {
+    color: var(--text-primary-color);
+}
+.progress-line {
+    flex-grow: 1;
+    height: 2px;
+    background-color: var(--border-color);
+    margin: 0 1rem;
+    transform: translateY(-8px);
+    transition: background-color 0.3s ease;
+}
+.progress-line.active {
+    background-color: var(--primary-color);
+}
+.signup-step-card {
+    background-color: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 2.5rem;
+}
+.signup-step-card h2 {
+    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
+}
+.signup-step-card p {
+    color: var(--text-secondary-color);
+    margin-bottom: 2rem;
+}
+.signup-navigation {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-color);
+}
+.skill-input-group {
+    display: flex;
+    gap: 0.5rem;
+}
+.skill-input-group input { flex-grow: 1; }
+.skill-input-group button {
+    padding: 0 1.5rem;
+    background-color: var(--primary-light);
+    color: var(--primary-color);
+    border: 1px solid var(--primary-color);
+    border-radius: 6px;
+    cursor: pointer;
+}
+.skills-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+.skills-display .skill-tag {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.skills-display .skill-tag button {
+    background: none;
+    border: none;
+    color: var(--danger-color);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+}
+.service-entry-form {
+    background-color: var(--background-color);
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--border-color);
+}
+.service-entry-form h4 {
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+}
+.btn-remove-service {
+    background: none;
+    border: none;
+    color: var(--danger-color);
+    text-decoration: underline;
+    cursor: pointer;
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+}
+.btn-add-service {
+    background: none;
+    border: 1px dashed var(--primary-color);
+    color: var(--primary-color);
+    width: 100%;
+    padding: 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 500;
+}
+.profile-preview-card {
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1rem;
+    background-color: var(--background-color);
+}
 
 /* Utility & Minor Component styles */
 .disclaimer { font-size: 0.8rem; color: var(--text-secondary-color); background-color: var(--background-color); padding: 0.75rem; border-radius: 8px; margin-bottom: 1.5rem; text-align: center; }
