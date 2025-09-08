@@ -73,15 +73,37 @@ interface Financials {
   q1: FinancialSummary; q2: FinancialSummary; q3: FinancialSummary; q4: FinancialSummary;
   ytd: FinancialSummary; tax: TaxData;
 }
+interface Review {
+  id: string;
+  reviewerName: string;
+  reviewerImageUrl: string;
+  rating: number;
+  comment: string;
+  date: string;
+}
+interface Expert {
+  id: string;
+  name: string;
+  title: string;
+  location: string;
+  profileImageUrl: string;
+  hourlyRate: number;
+  rating: number;
+  reviewCount: number;
+  bio: string;
+  services: { name: string; description: string; price: string; }[];
+  skills: string[];
+  reviews: Review[];
+}
 type AgingData = { current: number; '1-30': number; '31-60': number; '61-90': number; '90+': number; total: number; };
-type ActiveTab = 'home' | 'transactions' | 'ar' | 'ap' | 'recurring' | 'journal' | 'coa' | 'projects' | 'knowledge' | 'tax';
+type ActiveTab = 'home' | 'transactions' | 'ar' | 'ap' | 'recurring' | 'journal' | 'coa' | 'projects' | 'knowledge' | 'tax' | 'findExperts';
 type SearchResults = {
     transactions: Transaction[];
     invoices: Invoice[];
     bills: Bill[];
     projects: Project[];
 } | null;
-type AuthState = 'loading' |'loggedOut' | 'loggingIn' | 'loggedIn' | 'viewingPrivacy';
+type AuthState = 'loading' |'loggedOut' | 'loggingIn' | 'loggedIn' | 'viewingPrivacy' | 'viewingPublicProfile';
 
 
 // --- Default Data ---
@@ -120,52 +142,112 @@ const initialChartOfAccounts: Account[] = [
     { name: 'Miscellaneous Expense', type: 'Expense' },
 ];
 
+const mockExperts: Expert[] = [
+    {
+        id: '1',
+        name: 'Sarah Chen',
+        title: 'Certified Public Accountant (CPA)',
+        location: 'New York, NY',
+        profileImageUrl: 'https://i.pravatar.cc/150?img=1',
+        hourlyRate: 125,
+        rating: 4.9,
+        reviewCount: 82,
+        bio: "With over 10 years of experience serving small businesses and startups, I specialize in tax planning, compliance, and financial strategy. My goal is to help you build a solid financial foundation so you can focus on growth. I'm proficient in QuickBooks, Xero, and multi-state tax law.",
+        services: [
+            { name: 'Quarterly Tax Filing', description: 'Complete preparation and filing of your quarterly estimated taxes.', price: '$500 per quarter' },
+            { name: 'Bookkeeping Cleanup', description: 'A one-time project to organize and reconcile up to 12 months of transactions.', price: '$1,200 one-time' },
+            { name: 'Strategic Tax Advisory', description: 'Ongoing consultation to minimize your tax burden and maximize deductions.', price: '$250/hr' },
+        ],
+        skills: ['Tax Planning', 'QuickBooks Online', 'IRS Representation', 'Financial Strategy', 'LLC Formation'],
+        reviews: [
+            { id: 'r1', reviewerName: 'James Maxwell', reviewerImageUrl: 'https://i.pravatar.cc/150?img=2', rating: 5, comment: 'Sarah is a lifesaver! She cleaned up years of messy books and helped us save thousands on our taxes.', date: '2025-08-15' },
+            { id: 'r2', reviewerName: 'Fresh Blooms LLC', reviewerImageUrl: 'https://i.pravatar.cc/150?img=3', rating: 5, comment: 'Incredibly knowledgeable and responsive. Highly recommend for any e-commerce business.', date: '2025-07-22' },
+        ]
+    },
+    {
+        id: '2',
+        name: 'David Rodriguez',
+        title: 'Pro Bookkeeper & Payroll Specialist',
+        location: 'Austin, TX',
+        profileImageUrl: 'https://i.pravatar.cc/150?img=4',
+        hourlyRate: 75,
+        rating: 5.0,
+        reviewCount: 115,
+        bio: "I'm a dedicated bookkeeper with a passion for helping creative freelancers and agencies get their finances in order. I provide meticulous monthly bookkeeping, payroll services, and easy-to-understand financial reports to give you clarity and peace of mind.",
+        services: [
+            { name: 'Monthly Bookkeeping', description: 'Includes categorization of all transactions, bank reconciliation, and monthly P&L and Balance Sheet reports.', price: '$450/month' },
+            { name: 'Payroll for up to 5 Employees', description: 'Full-service payroll processing, including tax filings.', price: '$150 + $10/employee per month' },
+            { name: 'QuickBooks Setup', description: 'Custom setup of your QuickBooks Online account with a personalized chart of accounts.', price: '$600 one-time' },
+        ],
+        skills: ['Bookkeeping', 'Payroll', 'QuickBooks', 'Xero', 'Financial Reporting', 'Accounts Payable/Receivable'],
+        reviews: [
+            { id: 'r3', reviewerName: 'Creative Spark Agency', reviewerImageUrl: 'https://i.pravatar.cc/150?img=5', rating: 5, comment: 'David is the best. He handles everything flawlessly so we can focus on our clients. Our books have never been cleaner.', date: '2025-09-01' },
+            { id: 'r4', reviewerName: 'Lena Petrova', reviewerImageUrl: 'https://i.pravatar.cc/150?img=6', rating: 5, comment: "As a freelance designer, I used to dread bookkeeping. David makes it completely painless. He's organized, professional, and a pleasure to work with.", date: '2025-08-10' },
+        ]
+    },
+    {
+        id: '3',
+        name: 'Maria Garcia',
+        title: 'E-commerce & Inventory Specialist',
+        location: 'Miami, FL',
+        profileImageUrl: 'https://i.pravatar.cc/150?img=7',
+        hourlyRate: 90,
+        rating: 4.8,
+        reviewCount: 64,
+        bio: "I help e-commerce businesses thrive by untangling the complexities of inventory management, sales tax, and COGS. With expertise in platforms like Shopify, Amazon FBA, and WooCommerce, I ensure your financials accurately reflect your business's performance.",
+        services: [
+            { name: 'E-commerce Bookkeeping', description: 'Specialized monthly bookkeeping for Shopify/Amazon stores, including sales tax management.', price: '$600/month' },
+            { name: 'COGS & Inventory Setup', description: 'Properly set up and calculate Cost of Goods Sold and inventory tracking systems.', price: '$800 one-time' },
+        ],
+        skills: ['E-commerce Accounting', 'Shopify', 'Amazon FBA', 'Sales Tax', 'Inventory Management', 'Cost of Goods Sold (COGS)'],
+        reviews: [
+            { id: 'r5', reviewerName: 'Gadget Grove', reviewerImageUrl: 'https://i.pravatar.cc/150?img=8', rating: 5, comment: 'Maria is an expert in e-commerce. She helped us finally get a handle on our inventory and profitability. A must-hire for any online seller!', date: '2025-08-25' },
+        ]
+    }
+];
+
+
 // --- Auth Components ---
-const PricingSection: React.FC<{ onSelectPlan: () => void; }> = ({ onSelectPlan }) => (
-    <section className="pricing-section" id="pricing">
-        <div className="plans-header">
-            <h2>Find the right plan for your business</h2>
-            <p>Start for free and upgrade as you grow.</p>
+const BrowseIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>;
+const MessageIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>;
+const HireIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>;
+
+const HowItWorksSection: React.FC = () => (
+    <section className="how-it-works-section">
+        <div className="section-header">
+            <h2>How It Works</h2>
+            <p>Find your perfect financial partner in three simple steps.</p>
         </div>
-        <div className="pricing-cards-grid">
-            <div className="pricing-card">
-                <h3>Freemium</h3>
-                <div className="price"><span>$0</span>/ month</div>
-                <p className="plan-description">For individuals starting out.</p>
-                <button className="btn-secondary" onClick={onSelectPlan}>Get Started</button>
-                <ul className="features-list">
-                    <li><span>&#10003;</span> 5 transactions input each month</li>
-                    <li><span>&#10003;</span> Cashflow analysis</li>
-                    <li><span>&#10003;</span> Tax filing estimation</li>
-                    <li><span>&times;</span> No storage provided</li>
-                </ul>
+        <div className="steps-grid">
+            <div className="step-card">
+                <div className="step-icon"><BrowseIcon /></div>
+                <h3>1. Browse Experts</h3>
+                <p>Search our network of vetted professionals. Filter by service, industry, and price to find the right fit for your business.</p>
             </div>
-            <div className="pricing-card popular">
-                <div className="popular-badge">Most Popular</div>
-                <h3>Premium</h3>
-                <div className="price"><span>$9.9</span>/ month</div>
-                <p className="annual-price">$89.9 charged annually</p>
-                <p className="plan-description">For growing businesses needing more power.</p>
-                <button className="btn-primary" onClick={onSelectPlan}>Choose Premium</button>
-                <ul className="features-list">
-                    <li><span>&#10003;</span> Unlimited transactions</li>
-                    <li><span>&#10003;</span> Storage function</li>
-                    <li><span>&#10003;</span> Project based accounting</li>
-                    <li><span>&#10003;</span> All Freemium features</li>
-                </ul>
+            <div className="step-card">
+                <div className="step-icon"><MessageIcon /></div>
+                <h3>2. Send a Message</h3>
+                <p>Review profiles, read reviews, and connect directly with experts to discuss your needs before you commit. No obligation.</p>
             </div>
-            <div className="pricing-card">
-                <h3>Ultimate</h3>
-                <div className="price"><span>$19.9</span>/ month</div>
-                <p className="annual-price">$189.9 charged annually</p>
-                <p className="plan-description">For advanced tax and consultation needs.</p>
-                <button className="btn-secondary" onClick={onSelectPlan}>Choose Ultimate</button>
-                <ul className="features-list">
-                    <li><span>&#10003;</span> Tax filling checking</li>
-                    <li><span>&#10003;</span> One time tax filling consultation</li>
-                    <li><span>&#10003;</span> All Premium features</li>
-                </ul>
+            <div className="step-card">
+                <div className="step-icon"><HireIcon /></div>
+                <h3>3. Hire with Confidence</h3>
+                <p>Agree on the scope and price, then hire your chosen expert. All work and communication happens on our secure platform.</p>
             </div>
+        </div>
+    </section>
+);
+
+const FeaturedExpertsSection: React.FC<{ experts: Expert[], onSelectExpert: (id: string) => void }> = ({ experts, onSelectExpert }) => (
+    <section className="featured-experts-section">
+        <div className="section-header">
+            <h2>Meet Our Top-Rated Experts</h2>
+            <p>Get a glimpse of the incredible talent ready to help you.</p>
+        </div>
+        <div className="experts-grid">
+            {experts.slice(0, 3).map(expert => (
+                <ExpertCard key={expert.id} expert={expert} onViewProfile={() => onSelectExpert(expert.id)} />
+            ))}
         </div>
     </section>
 );
@@ -173,136 +255,82 @@ const PricingSection: React.FC<{ onSelectPlan: () => void; }> = ({ onSelectPlan 
 const AutomationIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
 const TaxComplianceIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>;
 const CashFlowIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>;
-const ClockIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
 const CheckIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>;
 
-const TimeBurdenIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
-const ComplianceCliffIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
-const CashFlowChokeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>;
-
-const ProblemsSection: React.FC = () => (
-    <section className="problems-section">
-        <div className="problems-header">
-            <h2>The Problems <span className="highlight">You Face Every Day</span></h2>
-            <p>We understand the challenges that keep you up at night. Here's what solopreneurs and small business owners tell us:</p>
-        </div>
-        <div className="problems-grid">
-            <div className="problem-card">
-                <div className="problem-card-header">
-                    <div className="problem-icon time"><TimeBurdenIcon/></div>
-                    <h3>The Time & Expertise Burden</h3>
-                </div>
-                <p>Lack the time, energy, or know-how to keep books accurate and up-to-date</p>
-                <div className="stat-highlight">
-                    <strong>73% of small businesses</strong>
-                    <strong>struggle with bookkeeping</strong>
-                </div>
-            </div>
-            <div className="problem-card">
-                <div className="problem-card-header">
-                    <div className="problem-icon compliance"><ComplianceCliffIcon/></div>
-                    <h3>The Compliance Cliff</h3>
-                </div>
-                <p>Multi-state taxes and self-employment tax complexities that can be 'close to killing us'</p>
-                <div className="stat-highlight">
-                    <strong>68% tax error rate</strong>
-                    <strong>in self-prepared business</strong>
-                </div>
-            </div>
-            <div className="problem-card">
-                <div className="problem-card-header">
-                    <div className="problem-icon cash"><CashFlowChokeIcon/></div>
-                    <h3>The Cash Flow Choke</h3>
-                </div>
-                <p>Manual process of chasing payments from clients creates constant stress</p>
-                <div className="stat-highlight">
-                    <strong>60+ days average</strong>
-                    <strong>payment time</strong>
-                </div>
-            </div>
-        </div>
-    </section>
-);
-
-const SolutionsSection: React.FC<{ onCTAClick: () => void; }> = ({ onCTAClick }) => (
+const WhyClarioSection: React.FC<{ onCTAClick: () => void; }> = ({ onCTAClick }) => (
     <section className="solutions-section">
         <div className="solutions-header">
-            <h2>How <span className="highlight">Clario.ai</span> Solves Your Problems</h2>
-            <p>Our AI-powered platform transforms your biggest bookkeeping challenges into simple, automated solutions.</p>
+            <h2>Why <span className="highlight">Clario.ai</span> is Different</h2>
+            <p>We built a platform centered on trust, transparency, and quality for your peace of mind.</p>
         </div>
         <div className="solutions-grid">
             <div className="solution-card">
                 <div className="solution-card-header">
                     <div className="solution-icon"><AutomationIcon /></div>
-                    <h3>One-Click Automation</h3>
+                    <h3>Vetted Professionals</h3>
                 </div>
-                <p>AI handles your bookkeeping in seconds, not hours. Connect your accounts and let Clario.ai do the rest.</p>
+                <p>Every expert on our platform is carefully vetted for their credentials, experience, and professionalism.</p>
                 <ul className="solution-features-list">
-                    <li><CheckIcon /> Automatic transaction categorization</li>
-                    <li><CheckIcon /> Real-time expense tracking</li>
-                    <li><CheckIcon /> Instant financial reports</li>
+                    <li><CheckIcon /> Verified credentials (CPA, EA, etc.)</li>
+                    <li><CheckIcon /> Background and reference checks</li>
+                    <li><CheckIcon /> Proven track record of success</li>
                 </ul>
             </div>
             <div className="solution-card">
                 <div className="solution-card-header">
                     <div className="solution-icon"><TaxComplianceIcon /></div>
-                    <h3>Tax Compliance Made Simple</h3>
+                    <h3>Transparent Pricing</h3>
                 </div>
-                <p>Navigate multi-state taxes and self-employment requirements with confidence and AI guidance.</p>
+                <p>No hidden fees or surprises. See hourly rates and project prices upfront before you even start a conversation.</p>
                  <ul className="solution-features-list">
-                    <li><CheckIcon /> Multi-state tax preparation</li>
-                    <li><CheckIcon /> Quarterly tax estimates</li>
-                    <li><CheckIcon /> Compliance alerts & reminders</li>
+                    <li><CheckIcon /> Fixed-price project options</li>
+                    <li><CheckIcon /> Clear hourly rates</li>
+                    <li><CheckIcon /> Agree on scope before work begins</li>
                 </ul>
             </div>
             <div className="solution-card">
                 <div className="solution-card-header">
                     <div className="solution-icon"><CashFlowIcon /></div>
-                    <h3>Smart Cash Flow Management</h3>
+                    <h3>Secure & Simple Platform</h3>
                 </div>
-                <p>Automate invoice tracking and payment follow-ups. Never chase payments manually again.</p>
+                <p>Manage communication, file sharing, and payments all in one secure, easy-to-use place.</p>
                  <ul className="solution-features-list">
-                    <li><CheckIcon /> Automated invoice reminders</li>
-                    <li><CheckIcon /> Payment tracking</li>
-                    <li><CheckIcon /> Cash flow forecasting</li>
+                    <li><CheckIcon /> Encrypted messaging</li>
+                    <li><CheckIcon /> Secure document storage</li>
+                    <li><CheckIcon /> Simple payment processing</li>
                 </ul>
             </div>
         </div>
         <div className="solutions-cta">
-             <div className="cta-setup-time">
-                <ClockIcon />
-                <span>Setup takes less than 5 minutes</span>
-            </div>
-            <h2>Ready to Simplify Your Bookkeeping?</h2>
-            <p>Join thousands of solopreneurs who've already automated their financial workflows with Clario.ai.</p>
-            <button className="btn-primary btn-large" onClick={onCTAClick}>Start Your Free Trial</button>
+            <h2>Ready to Find Your Financial Pro?</h2>
+            <p>Get the expert help you need to scale your business and reclaim your time.</p>
+            <button className="btn-primary btn-large" onClick={onCTAClick}>Browse Experts</button>
         </div>
     </section>
 );
 
 
-const LandingPage: React.FC<{ onLoginClick: () => void; onPrivacyClick: () => void; }> = ({ onLoginClick, onPrivacyClick }) => (
+const LandingPage: React.FC<{ onLoginClick: () => void; onPrivacyClick: () => void; onFindExpertClick: () => void; onViewExpertProfile: (id: string) => void; }> = ({ onLoginClick, onPrivacyClick, onFindExpertClick, onViewExpertProfile }) => (
     <div className="landing-container">
         <header className="landing-header">
             <div className="logo">Clario.ai</div>
             <nav>
                 <button className="btn-secondary" onClick={onLoginClick}>Log In</button>
-                <button className="btn-primary" onClick={onLoginClick}>Sign Up</button>
+                <button className="btn-primary" onClick={onLoginClick}>Become an Expert</button>
             </nav>
         </header>
         <main>
             <section className="hero-section">
-                <h1>Bookkeeping with Simplicity, Clarity, and Flexibility.</h1>
-                <p>Clario.ai uses AI to turn your complex financial data into a clear, manageable picture, so you can focus on what you do best.</p>
-                <button className="btn-primary btn-large" onClick={onLoginClick}>Get Started for Free</button>
+                <h1>Stop Juggling Books. Hire the Right Financial Expert, Right Now.</h1>
+                <p>Clario.ai is the trusted marketplace for solopreneurs to connect with top-rated bookkeepers, CPAs, and tax advisors.</p>
+                <button className="btn-primary btn-large" onClick={onFindExpertClick}>Find Your Expert</button>
             </section>
-            <ProblemsSection />
-            <SolutionsSection onCTAClick={onLoginClick} />
-            <PricingSection onSelectPlan={onLoginClick} />
+            <HowItWorksSection />
+            <FeaturedExpertsSection experts={mockExperts} onSelectExpert={onViewExpertProfile} />
+            <WhyClarioSection onCTAClick={onFindExpertClick} />
         </main>
         <footer className="landing-footer">
             <div className="footer-links">
-                <a href="#pricing">Plans & Pricing</a>
                 <a href="#" onClick={(e) => { e.preventDefault(); onPrivacyClick(); }}>Privacy Policy</a>
             </div>
             <p>&copy; 2025 Clario.ai. All rights reserved.</p>
@@ -427,6 +455,100 @@ const PrivacyPolicyPage: React.FC<{ onBack: () => void; }> = ({ onBack }) => (
     </div>
 );
 
+const PublicExpertProfilePage: React.FC<{ expert: Expert; onBack: () => void; onContact: () => void; onPrivacyClick: () => void; }> = ({ expert, onBack, onContact, onPrivacyClick }) => (
+    <div className="landing-container">
+        <header className="landing-header">
+            <div className="logo">Clario.ai</div>
+            <nav>
+                 <button className="btn-secondary" onClick={onBack}>Back to Home</button>
+                 <button className="btn-primary" onClick={onContact}>Log In to Contact</button>
+            </nav>
+        </header>
+        <main>
+             <div className="expert-profile-view public-view">
+                <div className="profile-grid">
+                    <div className="profile-main card">
+                        <div className="profile-header">
+                            <img src={expert.profileImageUrl} alt={expert.name} className="profile-avatar" />
+                            <div className="profile-header-info">
+                                <h1>{expert.name}</h1>
+                                <p className="profile-title">{expert.title}</p>
+                                <p className="profile-location">{expert.location}</p>
+                                <div className="profile-rating">
+                                    <Stars rating={expert.rating} count={expert.reviewCount}/>
+                                </div>
+                            </div>
+                            <div className="profile-header-actions">
+                                <div className="profile-rate">
+                                    <span>Starting at</span>
+                                    <strong>${expert.hourlyRate}/hr</strong>
+                                </div>
+                                <button className="btn-primary btn-large" onClick={onContact}>Send Message</button>
+                            </div>
+                        </div>
+                        <div className="profile-section">
+                            <h2>About Me</h2>
+                            <p>{expert.bio}</p>
+                        </div>
+                        <div className="profile-section">
+                            <h2>Services</h2>
+                            <div className="service-list">
+                                {expert.services.map(service => (
+                                    <div key={service.name} className="service-item">
+                                        <div className="service-info">
+                                            <h3>{service.name}</h3>
+                                            <p>{service.description}</p>
+                                        </div>
+                                        <div className="service-price">
+                                            <span>{service.price}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="profile-sidebar">
+                        <div className="card">
+                            <h3>Skills</h3>
+                            <div className="profile-skills">
+                                {expert.skills.map(skill => (
+                                    <span key={skill} className="skill-tag">{skill}</span>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="card">
+                            <h3>Client Reviews</h3>
+                            <div className="review-list">
+                                {expert.reviews.map(review => (
+                                    <div key={review.id} className="review-card">
+                                        <div className="review-header">
+                                            <img src={review.reviewerImageUrl} alt={review.reviewerName} />
+                                            <div>
+                                                <strong>{review.reviewerName}</strong>
+                                                <span>{review.date}</span>
+                                            </div>
+                                            <div className="review-rating">
+                                                <Stars rating={review.rating} />
+                                            </div>
+                                        </div>
+                                        <p className="review-comment">"{review.comment}"</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        <footer className="landing-footer">
+            <div className="footer-links">
+                <a href="#" onClick={(e) => { e.preventDefault(); onPrivacyClick(); }}>Privacy Policy</a>
+            </div>
+            <p>&copy; 2025 Clario.ai. All rights reserved.</p>
+        </footer>
+    </div>
+);
+
 
 // --- Bookkeeping App Component ---
 const App: React.FC = () => {
@@ -452,6 +574,8 @@ const App: React.FC = () => {
   const [selectedPeriod, setSelectedPeriod] = useState<'q1' | 'q2' | 'q3' | 'q4' | 'ytd'>('ytd');
   const [isBillingOpen, setIsBillingOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [experts] = useState<Expert[]>(mockExperts);
+  const [viewingExpertId, setViewingExpertId] = useState<string | null>(null);
 
 
   // State for Tax Agent
@@ -1131,8 +1255,19 @@ const App: React.FC = () => {
         setActiveTab(tab);
         setSearchQuery('');
     };
+    
+    const handleViewExpert = (expertId: string) => {
+        setViewingExpertId(expertId);
+    };
 
   const renderContent = () => {
+    if (viewingExpertId) {
+        const expert = experts.find(e => e.id === viewingExpertId);
+        if (expert) {
+            return <ExpertProfileView expert={expert} onBack={() => setViewingExpertId(null)} />;
+        }
+    }
+
     switch(activeTab) {
         case 'home':
             return <DashboardPLView
@@ -1145,6 +1280,8 @@ const App: React.FC = () => {
                 bills={bills}
                 getAgingData={getAgingData}
             />;
+        case 'findExperts':
+            return <FindExpertsView experts={experts} onViewExpert={handleViewExpert} />;
         case 'transactions':
             return <DashboardLogView
                 transactions={transactions}
@@ -1239,26 +1376,61 @@ const App: React.FC = () => {
   const handleLogout = () => {
       signOut(auth);
   };
+    
+  const handleViewPublicProfile = (expertId: string) => {
+    setViewingExpertId(expertId);
+    setAuthState('viewingPublicProfile');
+  };
+
 
   if (authState === 'loading') {
       return <div className="loading-fullscreen"></div>; // Replace with a proper loading spinner/UI
   }
+    
+  if (authState === 'viewingPublicProfile') {
+        const expert = experts.find(e => e.id === viewingExpertId);
+        if (expert) {
+            return <PublicExpertProfilePage 
+                        expert={expert} 
+                        onBack={() => { setViewingExpertId(null); setAuthState('loggedOut'); }}
+                        onContact={() => setAuthState('loggingIn')}
+                        onPrivacyClick={() => setAuthState('viewingPrivacy')}
+                    />;
+        } else {
+            // Fallback if expert ID is invalid, go back to landing
+            setAuthState('loggedOut');
+            return null;
+        }
+    }
 
   if (authState === 'viewingPrivacy') {
-      return <PrivacyPolicyPage onBack={() => setAuthState('loggedOut')} />;
+      return <PrivacyPolicyPage onBack={() => setAuthState(user ? 'loggedIn' : 'loggedOut')} />;
   }
 
   if (authState === 'loggedOut' || authState === 'loggingIn') {
+      const handleFindExpertClick = () => {
+          setAuthState('loggingIn');
+      };
       return authState === 'loggedOut' ? 
-        <LandingPage onLoginClick={() => setAuthState('loggingIn')} onPrivacyClick={() => setAuthState('viewingPrivacy')}/> :
+        <LandingPage 
+            onLoginClick={() => setAuthState('loggingIn')} 
+            onPrivacyClick={() => setAuthState('viewingPrivacy')} 
+            onFindExpertClick={handleFindExpertClick}
+            onViewExpertProfile={handleViewPublicProfile}
+        /> :
         <LoginPage onLogin={handleLogin} onSignUp={handleSignUp} />;
   }
+  
+  const handleSetActiveTab = (tab: ActiveTab) => {
+    setViewingExpertId(null); // Clear expert view when changing main tabs
+    setActiveTab(tab);
+  };
 
   return (
     <div className="app-layout">
         <Sidebar
             activeTab={activeTab}
-            setActiveTab={setActiveTab}
+            setActiveTab={handleSetActiveTab}
             isBillingOpen={isBillingOpen}
             setIsBillingOpen={setIsBillingOpen}
         />
@@ -1305,6 +1477,9 @@ const KnowledgeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" h
 const TaxIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.21 15.89-1.21-1.21a2 2 0 0 0-2.83 0l-1.18 1.18a2 2 0 0 1-2.83 0l-2.24-2.24a2 2 0 0 1 0-2.83l1.18-1.18a2 2 0 0 0 0-2.83l-1.21-1.21a2 2 0 0 0-2.83 0L2.1 12.89a2 2 0 0 0 0 2.83l8.49 8.48a2 2 0 0 0 2.83 0l8.48-8.48a2 2 0 0 0 0-2.83z"/><path d="M5.7 14.3 2.1 10.7a2 2 0 0 1 0-2.83l5.66-5.66a2 2 0 0 1 2.83 0l5.66 5.66a2 2 0 0 1 0 2.83l-5.66 5.66a2 2 0 0 1-2.83 0z"/></svg>;
 const SearchIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>;
 const ChevronDownIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>;
+const UsersIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
+const StarIcon = ({ filled }: { filled: boolean }) => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
+
 
 // --- Layout Components ---
 const Sidebar: React.FC<{
@@ -1321,6 +1496,7 @@ const Sidebar: React.FC<{
             <nav className="sidebar-nav">
                 <ul>
                     <li><a href="#" className={activeTab === 'home' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setActiveTab('home'); }}><HomeIcon /> Home</a></li>
+                    <li><a href="#" className={activeTab === 'findExperts' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setActiveTab('findExperts'); }}><UsersIcon /> Find Experts</a></li>
                     <li><a href="#" className={activeTab === 'transactions' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setActiveTab('transactions'); }}><TransactionsIcon /> Transactions</a></li>
                     <li>
                         <a href="#" className={isBillingActive ? 'active' : ''} onClick={(e) => { e.preventDefault(); setIsBillingOpen(!isBillingOpen); }}>
@@ -2737,6 +2913,150 @@ const BillModal = ({ onClose, onCreate, projects }: { onClose: () => void; onCre
         </div>
     );
 };
+
+const Stars = ({ rating, count }: { rating: number, count?: number }) => (
+    <div className="stars-container">
+        <div className="stars">
+            {[1, 2, 3, 4, 5].map(i => <StarIcon key={i} filled={i <= rating} />)}
+        </div>
+        {count !== undefined && <span className="review-count">({count})</span>}
+    </div>
+);
+
+
+const ExpertCard: React.FC<{ expert: Expert, onViewProfile: () => void }> = ({ expert, onViewProfile }) => (
+    <div className="expert-card" onClick={onViewProfile}>
+        <div className="expert-card-header">
+            <img src={expert.profileImageUrl} alt={expert.name} className="expert-avatar" />
+            <div className="expert-info">
+                <h3 className="expert-name">{expert.name}</h3>
+                <p className="expert-title">{expert.title}</p>
+                <div className="expert-rating">
+                    <StarIcon filled={true} /> 
+                    <span>{expert.rating.toFixed(1)} ({expert.reviewCount} reviews)</span>
+                </div>
+            </div>
+        </div>
+        <div className="expert-card-skills">
+            {expert.skills.slice(0, 3).map(skill => <span key={skill} className="skill-tag">{skill}</span>)}
+        </div>
+        <div className="expert-card-footer">
+            <span className="expert-rate">Starts at <strong>${expert.hourlyRate}/hr</strong></span>
+            <button className="btn-secondary">View Profile</button>
+        </div>
+    </div>
+);
+
+
+const FindExpertsView: React.FC<{ experts: Expert[], onViewExpert: (id: string) => void }> = ({ experts, onViewExpert }) => {
+    return (
+        <div className="find-experts-view">
+            <div className="module-header">
+                <h1>Find Your Financial Pro</h1>
+            </div>
+            <div className="filter-bar card">
+                <input type="text" placeholder="Search by name or keyword..." className="filter-search"/>
+                <select className="filter-select">
+                    <option value="">All Services</option>
+                    <option>Bookkeeping</option>
+                    <option>Tax Preparation</option>
+                    <option>Payroll</option>
+                    <option>Financial Consulting</option>
+                </select>
+                <div className="filter-rate">
+                    <label>Max Rate ($/hr)</label>
+                    <input type="range" min="25" max="300" defaultValue="150" />
+                </div>
+                <button className="btn-primary">Search</button>
+            </div>
+            <div className="experts-grid">
+                {experts.map(expert => (
+                    <ExpertCard key={expert.id} expert={expert} onViewProfile={() => onViewExpert(expert.id)} />
+                ))}
+            </div>
+        </div>
+    );
+};
+
+const ExpertProfileView: React.FC<{ expert: Expert, onBack: () => void }> = ({ expert, onBack }) => {
+    return (
+        <div className="expert-profile-view">
+            <button onClick={onBack} className="back-button">&larr; Back to Experts</button>
+            <div className="profile-grid">
+                <div className="profile-main card">
+                    <div className="profile-header">
+                        <img src={expert.profileImageUrl} alt={expert.name} className="profile-avatar" />
+                        <div className="profile-header-info">
+                            <h1>{expert.name}</h1>
+                            <p className="profile-title">{expert.title}</p>
+                            <p className="profile-location">{expert.location}</p>
+                            <div className="profile-rating">
+                                <Stars rating={expert.rating} count={expert.reviewCount}/>
+                            </div>
+                        </div>
+                        <div className="profile-header-actions">
+                            <div className="profile-rate">
+                                <span>Starting at</span>
+                                <strong>${expert.hourlyRate}/hr</strong>
+                            </div>
+                            <button className="btn-primary btn-large">Send Message</button>
+                        </div>
+                    </div>
+                    <div className="profile-section">
+                        <h2>About Me</h2>
+                        <p>{expert.bio}</p>
+                    </div>
+                     <div className="profile-section">
+                        <h2>Services</h2>
+                        <div className="service-list">
+                            {expert.services.map(service => (
+                                <div key={service.name} className="service-item">
+                                    <div className="service-info">
+                                        <h3>{service.name}</h3>
+                                        <p>{service.description}</p>
+                                    </div>
+                                    <div className="service-price">
+                                        <span>{service.price}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+                <div className="profile-sidebar">
+                    <div className="card">
+                         <h3>Skills</h3>
+                         <div className="profile-skills">
+                            {expert.skills.map(skill => (
+                                <span key={skill} className="skill-tag">{skill}</span>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="card">
+                        <h3>Client Reviews</h3>
+                        <div className="review-list">
+                            {expert.reviews.map(review => (
+                                <div key={review.id} className="review-card">
+                                    <div className="review-header">
+                                        <img src={review.reviewerImageUrl} alt={review.reviewerName} />
+                                        <div>
+                                            <strong>{review.reviewerName}</strong>
+                                            <span>{review.date}</span>
+                                        </div>
+                                        <div className="review-rating">
+                                            <Stars rating={review.rating} />
+                                        </div>
+                                    </div>
+                                    <p className="review-comment">"{review.comment}"</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
 root.render(
