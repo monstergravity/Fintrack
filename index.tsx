@@ -461,7 +461,7 @@ const PublicExpertProfilePage: React.FC<{ expert: Expert; onBack: () => void; on
             <div className="logo">Clario.ai</div>
             <nav>
                  <button className="btn-secondary" onClick={onBack}>Back to Home</button>
-                 <button className="btn-primary" onClick={onContact}>Log In to Contact</button>
+                 <button className="btn-primary" onClick={onContact}>Log In to Hire</button>
             </nav>
         </header>
         <main>
@@ -483,7 +483,7 @@ const PublicExpertProfilePage: React.FC<{ expert: Expert; onBack: () => void; on
                                     <span>Starting at</span>
                                     <strong>${expert.hourlyRate}/hr</strong>
                                 </div>
-                                <button className="btn-primary btn-large" onClick={onContact}>Send Message</button>
+                                <button className="btn-primary btn-large" onClick={onContact}>Hire {expert.name.split(' ')[0]}</button>
                             </div>
                         </div>
                         <div className="profile-section">
@@ -571,6 +571,7 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState<boolean>(false);
   const [isBillModalOpen, setIsBillModalOpen] = useState<boolean>(false);
+  const [isHireModalOpen, setIsHireModalOpen] = useState<boolean>(false);
   const [selectedPeriod, setSelectedPeriod] = useState<'q1' | 'q2' | 'q3' | 'q4' | 'ytd'>('ytd');
   const [isBillingOpen, setIsBillingOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1259,12 +1260,22 @@ const App: React.FC = () => {
     const handleViewExpert = (expertId: string) => {
         setViewingExpertId(expertId);
     };
+    
+    const handleOpenHireModal = () => {
+        setIsHireModalOpen(true);
+    };
+
+    const handleSendHireRequest = (details: { title: string; description: string }) => {
+        const expert = experts.find(e => e.id === viewingExpertId);
+        alert(`Hiring request for "${details.title}" sent to ${expert?.name}!`);
+        setIsHireModalOpen(false);
+    };
 
   const renderContent = () => {
     if (viewingExpertId) {
         const expert = experts.find(e => e.id === viewingExpertId);
         if (expert) {
-            return <ExpertProfileView expert={expert} onBack={() => setViewingExpertId(null)} />;
+            return <ExpertProfileView expert={expert} onBack={() => setViewingExpertId(null)} onHire={handleOpenHireModal} />;
         }
     }
 
@@ -1425,6 +1436,8 @@ const App: React.FC = () => {
     setViewingExpertId(null); // Clear expert view when changing main tabs
     setActiveTab(tab);
   };
+    
+  const expertToHire = experts.find(e => e.id === viewingExpertId);
 
   return (
     <div className="app-layout">
@@ -1457,6 +1470,13 @@ const App: React.FC = () => {
         )}
         {isInvoiceModalOpen && <InvoiceModal onClose={() => setIsInvoiceModalOpen(false)} onCreate={handleCreateInvoice} projects={projects} />}
         {isBillModalOpen && <BillModal onClose={() => setIsBillModalOpen(false)} onCreate={handleCreateBill} projects={projects} />}
+        {isHireModalOpen && expertToHire && (
+            <HireExpertModal
+                expertName={expertToHire.name}
+                onClose={() => setIsHireModalOpen(false)}
+                onSubmit={handleSendHireRequest}
+            />
+        )}
     </div>
   );
 };
@@ -2914,6 +2934,60 @@ const BillModal = ({ onClose, onCreate, projects }: { onClose: () => void; onCre
     );
 };
 
+const HireExpertModal: React.FC<{
+    expertName: string;
+    onClose: () => void;
+    onSubmit: (details: { title: string; description: string }) => void;
+}> = ({ expertName, onClose, onSubmit }) => {
+    const [title, setTitle] = useState('');
+    const [description, setDescription] = useState('');
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (title && description) {
+            onSubmit({ title, description });
+        }
+    };
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content" onClick={e => e.stopPropagation()}>
+                <h2>Send Hiring Request to {expertName}</h2>
+                <p>Describe your project details below. {expertName} will be notified and can respond to you directly.</p>
+                <form onSubmit={handleSubmit} style={{ marginTop: '1.5rem' }}>
+                    <div className="form-group full-width">
+                        <label htmlFor="project-title">Project Title</label>
+                        <input
+                            type="text"
+                            id="project-title"
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            placeholder="e.g., Monthly Bookkeeping for my LLC"
+                            required
+                        />
+                    </div>
+                    <div className="form-group full-width">
+                        <label htmlFor="project-description">Project Description</label>
+                        <textarea
+                            id="project-description"
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                            placeholder="Please describe the work you need done, including any specific tasks, goals, or deadlines."
+                            required
+                            style={{ minHeight: '120px' }}
+                        />
+                    </div>
+                    <div className="modal-actions">
+                        <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
+                        <button type="submit" className="btn-primary">Send Request</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+
 const Stars = ({ rating, count }: { rating: number, count?: number }) => (
     <div className="stars-container">
         <div className="stars">
@@ -2978,7 +3052,7 @@ const FindExpertsView: React.FC<{ experts: Expert[], onViewExpert: (id: string) 
     );
 };
 
-const ExpertProfileView: React.FC<{ expert: Expert, onBack: () => void }> = ({ expert, onBack }) => {
+const ExpertProfileView: React.FC<{ expert: Expert, onBack: () => void, onHire: () => void }> = ({ expert, onBack, onHire }) => {
     return (
         <div className="expert-profile-view">
             <button onClick={onBack} className="back-button">&larr; Back to Experts</button>
@@ -2999,7 +3073,7 @@ const ExpertProfileView: React.FC<{ expert: Expert, onBack: () => void }> = ({ e
                                 <span>Starting at</span>
                                 <strong>${expert.hourlyRate}/hr</strong>
                             </div>
-                            <button className="btn-primary btn-large">Send Message</button>
+                            <button className="btn-primary btn-large" onClick={onHire}>Hire {expert.name.split(' ')[0]}</button>
                         </div>
                     </div>
                     <div className="profile-section">
