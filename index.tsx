@@ -83,7 +83,7 @@ interface Expert {
   title: string;
   location: string;
   profileImageUrl: string;
-  hourlyRate: number;
+  hourlyrate: number;
   rating: number;
   reviewCount: number;
   bio: string;
@@ -436,7 +436,7 @@ const ExpertSignupFlow: React.FC<{
         password: '',
         title: '',
         location: '',
-        hourlyRate: 75,
+        hourlyrate: 75,
         bio: '',
         skills: [] as string[],
         services: [{ name: '', description: '', price: '' }],
@@ -453,7 +453,7 @@ const ExpertSignupFlow: React.FC<{
     };
 
     const handleRateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setFormData(prev => ({...prev, hourlyRate: parseInt(e.target.value, 10) }));
+        setFormData(prev => ({...prev, hourlyrate: parseInt(e.target.value, 10) }));
     }
 
     const handleAddSkill = () => {
@@ -491,7 +491,7 @@ const ExpertSignupFlow: React.FC<{
             - Name: ${formData.name || 'A financial professional'}
             - Title: ${formData.title}
             - Location: ${formData.location}
-            - Hourly Rate: $${formData.hourlyRate}
+            - Hourly Rate: $${formData.hourlyrate}
             - Key Skills: ${formData.skills.join(', ')}
             - Current draft (if any, refine it): "${formData.bio}"
             
@@ -540,7 +540,7 @@ const ExpertSignupFlow: React.FC<{
     };
     
     const handleSubmit = () => {
-        onComplete(formData);
+        onComplete(formData as ExpertFormData);
     }
     
     const steps = [
@@ -580,8 +580,8 @@ const ExpertSignupFlow: React.FC<{
                             <div className="form-group"><label>Professional Title</label><input type="text" name="title" value={formData.title} onChange={handleChange} placeholder="e.g., Certified Public Accountant" required /></div>
                             <div className="form-group"><label>Location</label><input type="text" name="location" value={formData.location} onChange={handleChange} placeholder="e.g., New York, NY" required /></div>
                             <div className="form-group">
-                                <label>Your Hourly Rate (${formData.hourlyRate}/hr)</label>
-                                <input type="range" name="hourlyRate" min="25" max="300" step="5" value={formData.hourlyRate} onChange={handleRateChange} />
+                                <label>Your Hourly Rate (${formData.hourlyrate}/hr)</label>
+                                <input type="range" name="hourlyrate" min="25" max="300" step="5" value={formData.hourlyrate} onChange={handleRateChange} />
                             </div>
                         </div>
                     )}
@@ -644,7 +644,7 @@ const ExpertSignupFlow: React.FC<{
                              <p>This is how your profile will appear to clients. Go back to make any changes.</p>
                              <div className="profile-preview-card">
                                  <ExpertProfileLayout expert={{
-                                     ...formData,
+                                     ...(formData as ExpertFormData),
                                      id: 'preview',
                                      user_id: 'preview-user-id',
                                      profileImageUrl: 'https://i.pravatar.cc/150?img=10', // Placeholder
@@ -1617,7 +1617,7 @@ const App: React.FC = () => {
                 name: data.name,
                 title: data.title,
                 location: data.location,
-                hourlyRate: data.hourlyRate,
+                hourlyrate: data.hourlyrate,
                 bio: data.bio,
                 skills: data.skills,
                 services: data.services,
@@ -3489,7 +3489,7 @@ const ExpertCard: React.FC<{ expert: Expert, onViewProfile: () => void }> = ({ e
             {expert.skills.slice(0, 3).map(skill => <span key={skill} className="skill-tag">{skill}</span>)}
         </div>
         <div className="expert-card-footer">
-            <span className="expert-rate">Starts at <strong>${expert.hourlyRate}/hr</strong></span>
+            <span className="expert-rate">Starts at <strong>${expert.hourlyrate}/hr</strong></span>
             <button className="btn-secondary">View Profile</button>
         </div>
     </div>
@@ -3598,7 +3598,7 @@ const ExpertProfileLayout: React.FC<{ expert: Expert, onHire: () => void, isPubl
             <div className="profile-sidebar">
                 <div className="profile-action-card card">
                     <div className="profile-rate">
-                        <strong>${expert.hourlyRate}</strong>
+                        <strong>${expert.hourlyrate}</strong>
                         <span>/hr</span>
                     </div>
                     <button className="btn-primary btn-large" onClick={onHire}>
