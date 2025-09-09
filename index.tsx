@@ -37,6 +37,7 @@ interface Transaction {
   id: string; vendor: string; amount: number; currency: string; date: string; category: string;
   transactionType: 'income' | 'expense'; journal: JournalEntry[]; reconciled?: boolean;
   projectId?: string; deductible?: boolean; miles?: number; classification: 'business' | 'personal';
+  vatAmount?: number; vatType?: 'input' | 'output';
 }
 interface BankStatementEntry { date: string; description: string; amount: number; }
 interface ReconciliationResults { matched: Transaction[]; unmatchedLedger: Transaction[]; unmatchedBank: BankStatementEntry[]; }
@@ -69,9 +70,12 @@ interface TaxData {
   cumulativeProfitForTax: number; paymentsMadeSoFar: number; currentQuarterPaymentDue: number;
   profitUpToCurrentQuarter: number; taxDueUpToCurrentQuarter: number;
 }
+interface VATSummary {
+    totalOutputVAT: number; totalInputVAT: number; netVatPayable: number;
+}
 interface Financials {
   q1: FinancialSummary; q2: FinancialSummary; q3: FinancialSummary; q4: FinancialSummary;
-  ytd: FinancialSummary; tax: TaxData;
+  ytd: FinancialSummary; tax: TaxData; vat: VATSummary;
 }
 interface Review {
   id: string;
@@ -114,12 +118,14 @@ const initialChartOfAccounts: Account[] = [
     // Assets
     { name: 'Bank', type: 'Asset' },
     { name: 'Accounts Receivable', type: 'Asset' },
+    { name: 'Allowance for Doubtful Accounts', type: 'Asset' },
     { name: 'Prepaid Expenses', type: 'Asset' },
     { name: 'Accumulated Depreciation', type: 'Asset' },
     // Liabilities
     { name: 'Accounts Payable', type: 'Liability' },
     { name: 'Credit Card', type: 'Liability' },
     { name: 'Sales Tax Payable', type: 'Liability' },
+    { name: 'VAT Payable', type: 'Liability' },
     // Equity
     { name: 'Owner\'s Equity', type: 'Equity' },
     // Revenue
@@ -128,11 +134,13 @@ const initialChartOfAccounts: Account[] = [
     { name: 'Other Income', type: 'Revenue' },
     // Expenses
     { name: 'Advertising & Marketing', type: 'Expense' },
+    { name: 'Bad Debt Expense', type: 'Expense' },
     { name: 'Bank Fees', type: 'Expense' },
     { name: 'Cost of Goods Sold', type: 'Expense' },
     { name: 'Depreciation Expense', type: 'Expense' },
     { name: 'Dues & Subscriptions', type: 'Expense' },
     { name: 'Insurance Expense', type: 'Expense' },
+    { name: 'Labor Cost', type: 'Expense' },
     { name: 'Legal & Professional Fees', type: 'Expense' },
     { name: 'Meals & Entertainment', type: 'Expense' },
     { name: 'Mileage Expense', type: 'Expense' },
@@ -155,7 +163,7 @@ const mockExperts: Expert[] = [
         hourlyRate: 125,
         rating: 4.9,
         reviewCount: 82,
-        bio: "With over 10 years of experience serving small businesses and startups, I specialize in tax planning, compliance, and financial strategy. My goal is to help you build a solid financial foundation so you can focus on growth. I'm proficient in Clario, Xero, and multi-state tax law.",
+        bio: "With over 10 years of experience serving small businesses and startups, I specialize in tax planning, compliance, and financial strategy. My goal is to help you build a solid financial foundation so you can focus on growth. I'm proficient in QuickBooks, Xero, and multi-state tax law.",
         services: [
             { name: 'Quarterly Tax Filing', description: 'Complete preparation and filing of your quarterly estimated taxes.', price: '$500 per quarter' },
             { name: 'Bookkeeping Cleanup', description: 'A one-time project to organize and reconcile up to 12 months of transactions.', price: '$1,200 one-time' },
@@ -694,6 +702,10 @@ const App: React.FC = () => {
   const [isTaxAgentLoading, setIsTaxAgentLoading] = useState<boolean>(false);
   const [quarterlyPayments, setQuarterlyPayments] = useState<QuarterlyPayments>({ q1: 0, q2: 0, q3: 0, q4: 0 });
     
+  // State for VAT
+  const [isVatEnabled, setIsVatEnabled] = useState<boolean>(false);
+  const [vatRate, setVatRate] = useState<number>(13.0);
+    
   // State for Knowledge Base
   const [knowledgeBaseAnswer, setKnowledgeBaseAnswer] = useState<string>('');
   const [isKnowledgeBaseLoading, setIsKnowledgeBaseLoading] = useState<boolean>(false);
@@ -807,36 +819,39 @@ const App: React.FC = () => {
     const projectContext = selectedProject ? `This transaction is for the project named "${selectedProject.name}". ` : '';
     const accountList = chartOfAccounts.map(a => a.name).join(', ');
 
+    const vatContext = isVatEnabled ? `VAT (Value-Added Tax) is enabled at a rate of ${vatRate}%. For sales transactions (income), calculate the VAT and include it as a credit to 'VAT Payable'. This is output VAT. For expense transactions, calculate the input VAT and include it as a debit to 'VAT Payable'. The main transaction 'amount' should be the pre-VAT amount. The total transaction value will be amount + VAT. The journal entry must balance.` : 'VAT processing is disabled.';
+
     try {
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
-        contents: `The current date is September 5, 2025. Assume this is 'today' for any transactions without a specified date. ${projectContext}From the text below, extract all financial transactions. For each transaction, provide a standard double-entry journal. Use ONLY accounts from the following Chart of Accounts for journal entries: [${accountList}]. For the 'category' field, you must use the exact name of the expense account debited in the journal. For example, a debit to 'Software & Subscriptions' means the category must be 'Software & Subscriptions'. If no specific expense account from the list fits the transaction, you must debit the 'Miscellaneous Expense' account and set the category to 'Miscellaneous Expense'. Mark common business expenses as 'deductible'. Crucially, classify each transaction as 'business' or 'personal'. Most transactions are 'business' unless they are obviously personal like 'groceries at Safeway'. Text: "${inputText}"`,
+        contents: `The current date is September 5, 2025. ${projectContext}${vatContext} From the text below, extract all financial transactions. Provide a standard double-entry journal using ONLY accounts from this list: [${accountList}]. For 'category', use the exact expense account name. Classify each transaction as 'business' or 'personal'. Text: "${inputText}"`,
         config: {
-          systemInstruction: "You are an expert bookkeeper for specialized professionals like lawyers, real estate agents, and contractors. You MUST use accounts from the provided Chart of Accounts for all journal entries. When you see a cash receipt from a customer, determine if it is new revenue or a settlement of Accounts Receivable. For example, 'received $2600 from customer X' should debit Bank and credit Accounts Receivable. When you see a bill from a vendor to be paid later, you must credit 'Accounts Payable'. Calculate totals if hours and rates are provided (e.g., '4 hours at $300/hr').",
+          systemInstruction: "You are an expert bookkeeper. You MUST use accounts from the provided Chart of Accounts. For a cash receipt from a customer, determine if it is new revenue or a settlement of Accounts Receivable. For a bill to be paid later, credit 'Accounts Payable'. If VAT is enabled, you MUST correctly calculate and journalize it, ensuring the 'amount' field is pre-tax.",
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.ARRAY,
             items: {
                 type: Type.OBJECT,
                 properties: {
-                    vendor: { type: Type.STRING, description: "Merchant, client, or source name (e.g., 'Home Depot', 'Client XYZ', 'Mileage')" },
-                    amount: { type: Type.NUMBER, description: "Transaction amount" },
-                    currency: { type: Type.STRING, description: "Currency code (e.g., USD, CNY)" },
-                    date: { type: Type.STRING, description: "Date (YYYY-MM-DD), assume today if not mentioned" },
-                    category: { type: Type.STRING, description: "A brief, human-readable category based on the expense account used (e.g., 'Software', 'Travel', 'Income')." },
-                    transactionType: { type: Type.STRING, description: "Is this 'income' or 'expense'?" },
-                    classification: { type: Type.STRING, description: "Classify as 'business' or 'personal'. Default to 'business' for typical business expenses." },
-                    deductible: { type: Type.BOOLEAN, description: "Is this expense likely tax-deductible for a self-employed person? Default to true for business expenses."},
-                    miles: { type: Type.NUMBER, description: "If the transaction is for mileage, specify the number of miles driven."},
+                    vendor: { type: Type.STRING },
+                    amount: { type: Type.NUMBER, description: "The pre-tax amount of the transaction." },
+                    vatAmount: { type: Type.NUMBER, description: "The calculated VAT amount. Omit if not applicable." },
+                    vatType: { type: Type.STRING, description: "Either 'input' (for expenses) or 'output' (for income)." },
+                    currency: { type: Type.STRING },
+                    date: { type: Type.STRING },
+                    category: { type: Type.STRING },
+                    transactionType: { type: Type.STRING },
+                    classification: { type: Type.STRING },
+                    deductible: { type: Type.BOOLEAN },
+                    miles: { type: Type.NUMBER },
                     journal: {
                         type: Type.ARRAY,
-                        description: "The double-entry journal for the transaction.",
                         items: {
                             type: Type.OBJECT,
                             properties: {
-                                account: { type: Type.STRING, description: "The account name, chosen ONLY from the provided Chart of Accounts list." },
-                                debit: { type: Type.NUMBER, description: "The debit amount." },
-                                credit: { type: Type.NUMBER, description: "The credit amount." },
+                                account: { type: Type.STRING },
+                                debit: { type: Type.NUMBER },
+                                credit: { type: Type.NUMBER },
                             },
                              required: ["account"]
                         }
@@ -858,6 +873,9 @@ const App: React.FC = () => {
       const tempNewInvoices: Invoice[] = [];
 
       parsedTransactions.forEach(t => {
+          // The total amount recorded against bank/AR/AP should include VAT
+          const totalAmount = t.amount + (t.vatAmount || 0);
+
           const newTxId = crypto.randomUUID();
           const newTxData: Transaction = {
               id: newTxId,
@@ -877,7 +895,7 @@ const App: React.FC = () => {
               const newBillData: Bill = {
                   id: crypto.randomUUID(),
                   vendor: newTxData.vendor, billNumber: `B-${Date.now()}`, billDate: newTxData.date,
-                  dueDate: dueDate.toISOString().split('T')[0], amount: newTxData.amount, status: 'Open' as 'Open',
+                  dueDate: dueDate.toISOString().split('T')[0], amount: totalAmount, status: 'Open' as 'Open',
                   relatedTransactionId: newTxId
               };
               tempNewBills.push(newBillData);
@@ -888,8 +906,8 @@ const App: React.FC = () => {
               const newInvData: Invoice = {
                   id: crypto.randomUUID(),
                   customer: newTxData.vendor, invoiceNumber: `INV-${Date.now()}`, invoiceDate: newTxData.date,
-                  dueDate: dueDate.toISOString().split('T')[0], amount: newTxData.amount, status: 'Sent' as 'Sent',
-                  relatedTransactionId: newTxId, taxable: false,
+                  dueDate: dueDate.toISOString().split('T')[0], amount: totalAmount, status: 'Sent' as 'Sent',
+                  relatedTransactionId: newTxId, taxable: !!t.vatAmount,
               };
               tempNewInvoices.push(newInvData);
           }
@@ -940,13 +958,34 @@ const App: React.FC = () => {
 
   const handleCreateInvoice = async (invoiceData: Omit<Invoice, 'id' | 'status' | 'relatedTransactionId'> & { projectId?: string }) => {
     const txId = crypto.randomUUID();
+    let journal: JournalEntry[];
+    let vatAmt = 0;
+    let totalAmount = invoiceData.amount;
+
+    if (isVatEnabled && invoiceData.taxable) {
+        vatAmt = invoiceData.amount * (vatRate / 100);
+        totalAmount += vatAmt;
+        journal = [
+            { account: 'Accounts Receivable', debit: totalAmount },
+            { account: 'Sales Revenue', credit: invoiceData.amount },
+            { account: 'VAT Payable', credit: vatAmt }
+        ];
+    } else {
+        journal = [
+            { account: 'Accounts Receivable', debit: invoiceData.amount },
+            { account: 'Sales Revenue', credit: invoiceData.amount }
+        ];
+    }
+
     const newTransactionData: Transaction = {
         id: txId,
         vendor: invoiceData.customer, amount: invoiceData.amount, currency: 'USD', date: invoiceData.invoiceDate,
         category: 'Sales', transactionType: 'income', classification: 'business',
-        journal: [{ account: 'Accounts Receivable', debit: invoiceData.amount }, { account: 'Sales Revenue', credit: invoiceData.amount }],
+        journal,
         reconciled: false,
-        projectId: invoiceData.projectId
+        projectId: invoiceData.projectId,
+        vatAmount: vatAmt > 0 ? vatAmt : undefined,
+        vatType: vatAmt > 0 ? 'output' : undefined
     };
     
     const newInvoiceData: Invoice = {
@@ -955,7 +994,7 @@ const App: React.FC = () => {
         invoiceNumber: invoiceData.invoiceNumber,
         invoiceDate: invoiceData.invoiceDate,
         dueDate: invoiceData.dueDate,
-        amount: invoiceData.amount,
+        amount: totalAmount, // The total amount owed by the customer
         taxable: invoiceData.taxable,
         status: 'Draft',
         relatedTransactionId: txId
@@ -993,16 +1032,35 @@ const App: React.FC = () => {
     }
   };
 
-  const handleCreateBill = async (billData: Omit<Bill, 'id' | 'status' | 'relatedTransactionId'> & { projectId?: string }) => {
+  const handleCreateBill = async (billData: Omit<Bill, 'id' | 'status' | 'relatedTransactionId'> & { projectId?: string, vatAmount?: number }) => {
         const expenseAccount = 'Miscellaneous Expense';
         const txId = crypto.randomUUID();
+        let journal: JournalEntry[];
+        let totalAmount = billData.amount;
+
+        if (isVatEnabled && billData.vatAmount && billData.vatAmount > 0) {
+            totalAmount += billData.vatAmount;
+            journal = [
+                { account: expenseAccount, debit: billData.amount },
+                { account: 'VAT Payable', debit: billData.vatAmount },
+                { account: 'Accounts Payable', credit: totalAmount }
+            ];
+        } else {
+            journal = [
+                { account: expenseAccount, debit: billData.amount },
+                { account: 'Accounts Payable', credit: billData.amount }
+            ];
+        }
+
         const newTransactionData: Transaction = {
             id: txId,
             vendor: billData.vendor, amount: billData.amount, currency: 'USD', date: billData.billDate,
             category: 'Bill', transactionType: 'expense', classification: 'business',
-            journal: [{ account: expenseAccount, debit: billData.amount }, { account: 'Accounts Payable', credit: billData.amount }],
+            journal,
             reconciled: false,
-            projectId: billData.projectId
+            projectId: billData.projectId,
+            vatAmount: billData.vatAmount,
+            vatType: billData.vatAmount ? 'input' : undefined
         };
 
         const newBillData: Bill = {
@@ -1011,7 +1069,7 @@ const App: React.FC = () => {
             billNumber: billData.billNumber,
             billDate: billData.billDate,
             dueDate: billData.dueDate,
-            amount: billData.amount,
+            amount: totalAmount, // Total amount to be paid
             status: 'Open',
             relatedTransactionId: txId
         };
@@ -1115,6 +1173,7 @@ const App: React.FC = () => {
             const quarter = getQuarter(t.date);
 
             t.journal.forEach(j => {
+                // P&L calculation should be based on the net amount (pre-tax)
                 if (j.credit && revenueAccountTypes.has(j.account)) {
                     periods[quarter].income += j.credit;
                 }
@@ -1131,13 +1190,11 @@ const App: React.FC = () => {
         });
 
         invoices.forEach(inv => {
-             if (inv.taxable) {
-                const originalTx = businessTransactions.find(t => t.id === inv.relatedTransactionId);
-                if (originalTx) {
-                    const quarter = getQuarter(originalTx.date);
-                    periods[quarter].taxableSales += inv.amount;
-                }
-            }
+             const originalTx = businessTransactions.find(t => t.id === inv.relatedTransactionId);
+             if (originalTx && inv.taxable && !isVatEnabled) {
+                const quarter = getQuarter(originalTx.date);
+                periods[quarter].taxableSales += originalTx.amount;
+             }
         });
 
         const ytd = { income: 0, expenses: 0, net: 0, accountTotals: {} as Record<string, number>, deductibleExpenses: 0, miles: 0, mileageDeduction: 0, taxableSales: 0, netProfitForTax: 0 };
@@ -1192,6 +1249,18 @@ const App: React.FC = () => {
         const currentQuarterPaymentDue = taxDueUpToCurrentQuarter - paymentsMadeSoFar;
         const totalTaxOnYTDProfit = Math.max(0, (result.ytd.netProfitForTax * 0.9235) * (seTaxRate / 100));
         const estimatedSalesTax = result.ytd.taxableSales * (salesTaxRate / 100);
+        
+        // VAT Calculation
+        const vatSummary: VATSummary = businessTransactions.reduce((acc, tx) => {
+            if (tx.vatType === 'output' && tx.vatAmount) {
+                acc.totalOutputVAT += tx.vatAmount;
+            } else if (tx.vatType === 'input' && tx.vatAmount) {
+                acc.totalInputVAT += tx.vatAmount;
+            }
+            return acc;
+        }, { totalOutputVAT: 0, totalInputVAT: 0, netVatPayable: 0 });
+
+        vatSummary.netVatPayable = vatSummary.totalOutputVAT - vatSummary.totalInputVAT;
 
         return {
             ...result,
@@ -1204,9 +1273,10 @@ const App: React.FC = () => {
                 currentQuarterPaymentDue,
                 profitUpToCurrentQuarter,
                 taxDueUpToCurrentQuarter,
-            }
+            },
+            vat: vatSummary
         };
-    }, [transactions, invoices, seTaxRate, salesTaxRate, irsMileageRate, quarterlyPayments, chartOfAccounts]);
+    }, [transactions, invoices, seTaxRate, salesTaxRate, irsMileageRate, quarterlyPayments, chartOfAccounts, isVatEnabled, vatRate]);
 
     const handleAskTaxAgent = async () => {
         if (!taxQuestion.trim() || isTaxAgentLoading) return;
@@ -1223,6 +1293,7 @@ const App: React.FC = () => {
             - Calculated Mileage Deduction: $${financials.ytd.mileageDeduction.toFixed(2)}
             - Estimated YTD Self-Employment Tax Due: $${financials.tax.totalTaxOnYTDProfit.toFixed(2)}
             - Estimated Sales Tax Owed: $${financials.tax.estimatedSalesTax.toFixed(2)}
+            - Net VAT Payable: $${financials.vat.netVatPayable.toFixed(2)}
 
             User's Question: "${taxQuestion}"
         `;
@@ -1483,6 +1554,10 @@ const App: React.FC = () => {
                 handleAskTaxAgent={handleAskTaxAgent}
                 isTaxAgentLoading={isTaxAgentLoading}
                 taxAgentResponse={taxAgentResponse}
+                isVatEnabled={isVatEnabled}
+                setIsVatEnabled={setIsVatEnabled}
+                vatRate={vatRate}
+                setVatRate={setVatRate}
             />;
         case 'recurring':
             return <RecurringView
@@ -1599,8 +1674,8 @@ const App: React.FC = () => {
                 chartOfAccounts={chartOfAccounts}
             />
         )}
-        {isInvoiceModalOpen && <InvoiceModal onClose={() => setIsInvoiceModalOpen(false)} onCreate={handleCreateInvoice} projects={projects} />}
-        {isBillModalOpen && <BillModal onClose={() => setIsBillModalOpen(false)} onCreate={handleCreateBill} projects={projects} />}
+        {isInvoiceModalOpen && <InvoiceModal onClose={() => setIsInvoiceModalOpen(false)} onCreate={handleCreateInvoice} projects={projects} isVatEnabled={isVatEnabled} vatRate={vatRate} />}
+        {isBillModalOpen && <BillModal onClose={() => setIsBillModalOpen(false)} onCreate={handleCreateBill} projects={projects} isVatEnabled={isVatEnabled} />}
         {isHireModalOpen && expertToHire && (
             <HireExpertModal
                 expertName={expertToHire.name}
@@ -1635,6 +1710,7 @@ const ClockIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" heigh
 const CalendarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>;
 const BriefcaseIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>;
 const ShopifyIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16.2 7.8c2.4 2.4 2.4 6.4 0 8.8-2.4 2.4-6.4 2.4-8.8 0-2.4-2.4-2.4-6.4 0-8.8 2.4-2.4 6.4-2.4 8.8 0z"/><path d="M11 12H8"/><path d="M11 12h5c0-2.8-2.2-5-5-5s-5 2.2-5 5h5z"/></svg>;
+const ExportIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>;
 
 
 // --- Layout Components ---
@@ -2052,6 +2128,36 @@ const DashboardPLView: React.FC<{
         return { currentCashBalance, totalReceivables, totalPayables, projectedCashBalance };
     }, [transactions, invoices, bills, getAgingData]);
 
+    const handleExportPL = () => {
+        const data = financials[selectedPeriod];
+        let csvContent = "data:text/csv;charset=utf-8,";
+        csvContent += `Clario.ai Profit & Loss Statement\n`;
+        csvContent += `Period: ${selectedPeriod.toUpperCase()}\n\n`;
+
+        csvContent += "Category,Amount\n";
+        csvContent += "INCOME\n";
+        csvContent += `Total Income,${data.income.toFixed(2)}\n\n`;
+        
+        csvContent += "EXPENSES\n";
+        const expenseDetails = Object.entries(data.accountTotals)
+            .sort(([, aVal], [, bVal]) => bVal - aVal);
+        expenseDetails.forEach(([account, amount]) => {
+            csvContent += `${account},${amount.toFixed(2)}\n`;
+        });
+        csvContent += `Total Expenses,${data.expenses.toFixed(2)}\n\n`;
+        
+        csvContent += "NET PROFIT\n";
+        csvContent += `Net Profit,${data.net.toFixed(2)}\n`;
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `Clario_PL_${selectedPeriod.toUpperCase()}_${CURRENT_DATE_ISO}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     return (
         <div className="dashboard-pl-view">
             <div className="stat-card-grid">
@@ -2074,12 +2180,15 @@ const DashboardPLView: React.FC<{
             <section className="pnl-statement card">
                 <div className="pnl-title-bar">
                     <h3>Profit & Loss Statement</h3>
-                    <div className="period-selector">
-                        {(['q1', 'q2', 'q3', 'q4', 'ytd'] as const).map(p => (
-                            <button key={p} className={selectedPeriod === p ? 'active' : ''} onClick={() => setSelectedPeriod(p)}>
-                                {p.toUpperCase()}
-                            </button>
-                        ))}
+                    <div className="pnl-actions">
+                        <button className="btn-export" onClick={handleExportPL}><ExportIcon /> Export to CSV</button>
+                        <div className="period-selector">
+                            {(['q1', 'q2', 'q3', 'q4', 'ytd'] as const).map(p => (
+                                <button key={p} className={selectedPeriod === p ? 'active' : ''} onClick={() => setSelectedPeriod(p)}>
+                                    {p.toUpperCase()}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
                 <div className="pnl-section">
@@ -2345,14 +2454,20 @@ const TaxAgentView: React.FC<{
     setTaxQuestion: (q: string) => void,
     handleAskTaxAgent: () => void,
     isTaxAgentLoading: boolean,
-    taxAgentResponse: string
+    taxAgentResponse: string,
+    isVatEnabled: boolean,
+    setIsVatEnabled: (enabled: boolean) => void,
+    vatRate: number,
+    setVatRate: (rate: number) => void,
 }> = ({
     financials, quarterlyPayments, setQuarterlyPayments, seTaxRate, setSeTaxRate, salesTaxRate, setSalesTaxRate,
-    irsMileageRate, setIrsMileageRate, taxQuestion, setTaxQuestion, handleAskTaxAgent, isTaxAgentLoading, taxAgentResponse
+    irsMileageRate, setIrsMileageRate, taxQuestion, setTaxQuestion, handleAskTaxAgent, isTaxAgentLoading, taxAgentResponse,
+    isVatEnabled, setIsVatEnabled, vatRate, setVatRate
 }) => {
-    const { tax } = financials;
+    const { tax, vat } = financials;
     const paymentDueText = tax.currentQuarterPaymentDue >= 0 ? "Est. Payment Due" : "Est. Overpayment / Refund";
     const paymentDueClass = tax.currentQuarterPaymentDue >= 0 ? "warning" : "income";
+    const netVatPayableClass = vat.netVatPayable >= 0 ? "warning" : "income";
 
     return (
          <div className="card">
@@ -2362,31 +2477,26 @@ const TaxAgentView: React.FC<{
             <p className="disclaimer">
                 This is an AI-powered tool for estimation purposes only. It is not financial advice. Please consult with a qualified tax professional.
             </p>
-            <div className="stat-card-grid">
-                <div className="stat-card">
-                    <div className="label">
-                        {paymentDueText} (Q{tax.currentQuarter})
-                        <Tooltip
-                            text={
-                                <div className="tax-breakdown">
-                                    <h4>Q{tax.currentQuarter} Tax Calculation</h4>
-                                    <div className="breakdown-section">
-                                        <h5>Cumulative Profit</h5>
-                                        <div className="breakdown-line"><span>Profit up to Q{tax.currentQuarter}</span> <span>${tax.profitUpToCurrentQuarter.toFixed(2)}</span></div>
-                                        <div className="breakdown-line total"><span>Total Est. Tax Due YTD</span> <span>${tax.taxDueUpToCurrentQuarter.toFixed(2)}</span></div>
+            <div className="stat-card-grid tax-grid">
+                {isVatEnabled && (
+                     <div className="stat-card">
+                        <div className="label">
+                           Net VAT Payable
+                           <Tooltip
+                                text={
+                                    <div className="tax-breakdown">
+                                        <h4>VAT Calculation</h4>
+                                        <div className="breakdown-line"><span>Total Output VAT (Sales)</span> <span>${vat.totalOutputVAT.toFixed(2)}</span></div>
+                                        <div className="breakdown-line"><span>Total Input VAT (Purchases)</span> <span>-${vat.totalInputVAT.toFixed(2)}</span></div>
+                                        <hr/>
+                                        <div className={`breakdown-line total ${netVatPayableClass}-text`}><span>Net VAT Payable</span> <span>${vat.netVatPayable.toFixed(2)}</span></div>
                                     </div>
-                                    <div className="breakdown-section">
-                                        <h5>Payments</h5>
-                                        <div className="breakdown-line"><span>Payments made before Q{tax.currentQuarter}</span> <span>-${tax.paymentsMadeSoFar.toFixed(2)}</span></div>
-                                    </div>
-                                    <hr />
-                                    <div className={`breakdown-line quarterly ${paymentDueClass}-text`}><span>{paymentDueText}</span> <span>${Math.abs(tax.currentQuarterPaymentDue).toFixed(2)}</span></div>
-                                </div>
-                            }
-                        />
+                                }
+                            />
+                        </div>
+                        <div className={`value ${netVatPayableClass}`}>${vat.netVatPayable.toFixed(2)}</div>
                     </div>
-                    <div className={`value ${paymentDueClass}`}>{tax.currentQuarterPaymentDue < 0 ? `-$${Math.abs(tax.currentQuarterPaymentDue).toFixed(2)}` : `$${tax.currentQuarterPaymentDue.toFixed(2)}`}</div>
-                </div>
+                )}
                  <div className="stat-card">
                     <div className="label">YTD Net Profit (for Tax)</div>
                     <div className="value">${financials.ytd.netProfitForTax.toFixed(2)}</div>
@@ -2395,14 +2505,51 @@ const TaxAgentView: React.FC<{
                     <div className="label">Est. YTD SE Tax</div>
                     <div className="value warning">${tax.totalTaxOnYTDProfit.toFixed(2)}</div>
                 </div>
-                 <div className="stat-card">
-                    <div className="label">Est. Sales Tax Owed</div>
-                    <div className="value warning">${tax.estimatedSalesTax.toFixed(2)}</div>
+                 {!isVatEnabled && (
+                    <div className="stat-card">
+                        <div className="label">Est. Sales Tax Owed</div>
+                        <div className="value warning">${tax.estimatedSalesTax.toFixed(2)}</div>
+                    </div>
+                 )}
+            </div>
+            <div className="tax-settings-section">
+                <h3>Tax Settings</h3>
+                 <div className="tax-settings">
+                     <div className="form-group">
+                        <label>Self-Employment Tax Rate (%)</label>
+                        <input type="number" value={seTaxRate} onChange={e => setSeTaxRate(parseFloat(e.target.value) || 0)} />
+                    </div>
+                    {!isVatEnabled && (
+                        <div className="form-group">
+                            <label>Sales Tax Rate (%)</label>
+                            <input type="number" value={salesTaxRate} onChange={e => setSalesTaxRate(parseFloat(e.target.value) || 0)} />
+                        </div>
+                    )}
+                    <div className="form-group">
+                        <label>IRS Mileage Rate ($)</label>
+                        <input type="number" step="0.01" value={irsMileageRate} onChange={e => setIrsMileageRate(parseFloat(e.target.value) || 0)} />
+                    </div>
+                 </div>
+                 <div className="vat-settings">
+                    <div className="form-group form-group-toggle">
+                        <label>Enable VAT Calculation</label>
+                         <label className="switch">
+                            <input type="checkbox" checked={isVatEnabled} onChange={e => setIsVatEnabled(e.target.checked)} />
+                            <span className="slider round"></span>
+                        </label>
+                    </div>
+                    {isVatEnabled && (
+                        <div className="form-group">
+                            <label>VAT Rate (%)</label>
+                            <input type="number" step="0.1" value={vatRate} onChange={e => setVatRate(parseFloat(e.target.value) || 0)} />
+                        </div>
+                    )}
                 </div>
             </div>
 
+
              <div className="tax-payments">
-                <h4>Quarterly Tax Payments Made</h4>
+                <h4>Quarterly Estimated Tax Payments Made (SE Tax)</h4>
                 <div className="payment-inputs">
                     {(['q1', 'q2', 'q3', 'q4'] as const).map(q => (
                         <div className="form-group" key={q}>
@@ -2416,21 +2563,6 @@ const TaxAgentView: React.FC<{
                             />
                         </div>
                     ))}
-                </div>
-             </div>
-
-             <div className="tax-settings">
-                 <div className="form-group">
-                    <label htmlFor="se-tax-rate">Self-Employment Tax Rate (%)</label>
-                    <input id="se-tax-rate" type="number" value={seTaxRate} onChange={e => setSeTaxRate(parseFloat(e.target.value) || 0)} />
-                </div>
-                <div className="form-group">
-                    <label htmlFor="sales-tax-rate">Sales Tax Rate (%)</label>
-                    <input id="sales-tax-rate" type="number" value={salesTaxRate} onChange={e => setSalesTaxRate(parseFloat(e.target.value) || 0)} />
-                </div>
-                <div className="form-group">
-                    <label htmlFor="mileage-rate">IRS Mileage Rate ($)</label>
-                    <input id="mileage-rate" type="number" step="0.01" value={irsMileageRate} onChange={e => setIrsMileageRate(parseFloat(e.target.value) || 0)} />
                 </div>
              </div>
 
@@ -2758,6 +2890,8 @@ const COAView: React.FC<{ chartOfAccounts: Account[], onAddAccount: (account: Ac
 
 const TransactionCard = ({ transaction, onEdit, onDelete, projects, onToggleClassification }: { transaction: Transaction, onEdit: (t: Transaction) => void, onDelete: (id: string) => void, projects: Project[], onToggleClassification: (id: string) => void }) => {
     const project = projects.find(p => p.id === transaction.projectId);
+    const totalAmount = transaction.amount + (transaction.vatAmount || 0);
+
     return (
         <div className={`transaction-card ${transaction.transactionType} classification-${transaction.classification}`} key={transaction.id}>
           <div className="field">
@@ -2774,7 +2908,7 @@ const TransactionCard = ({ transaction, onEdit, onDelete, projects, onToggleClas
           </div>
           <div className="amount">
             {transaction.transactionType === 'income' ? '+' : '-'}
-            ${transaction.amount.toFixed(2)}
+            ${totalAmount.toFixed(2)}
           </div>
 
           <div className="tags-container">
@@ -2956,8 +3090,9 @@ const EditTransactionModal = ({ transaction, onClose, onUpdate, chartOfAccounts 
                     <div className="form-grid">
                         <div className="form-group"><label>Vendor/Client</label><input type="text" name="vendor" value={formData.vendor} onChange={handleChange} /></div>
                         <div className="form-group"><label>Date</label><input type="date" name="date" value={formData.date} onChange={handleChange} /></div>
-                        <div className="form-group"><label>Amount</label><input type="number" name="amount" value={formData.amount} onChange={handleChange} /></div>
-                        <div className="form-group"><label>Category</label><input type="text" name="category" value={formData.category} onChange={handleChange} /></div>
+                        <div className="form-group"><label>Amount (pre-tax)</label><input type="number" name="amount" value={formData.amount} onChange={handleChange} /></div>
+                        <div className="form-group"><label>VAT Amount</label><input type="number" name="vatAmount" value={formData.vatAmount || ''} onChange={handleChange} /></div>
+                        <div className="form-group full-width"><label>Category</label><input type="text" name="category" value={formData.category} onChange={handleChange} /></div>
                     </div>
                     <h4>Journal Entries</h4>
                     <div className="journal-edit-header">
@@ -2984,7 +3119,7 @@ const EditTransactionModal = ({ transaction, onClose, onUpdate, chartOfAccounts 
     );
 };
 
-const InvoiceModal = ({ onClose, onCreate, projects }: { onClose: () => void; onCreate: (data: Omit<Invoice, 'id'|'status'|'relatedTransactionId'> & { projectId?: string }) => void; projects: Project[] }) => {
+const InvoiceModal = ({ onClose, onCreate, projects, isVatEnabled, vatRate }: { onClose: () => void; onCreate: (data: Omit<Invoice, 'id'|'status'|'relatedTransactionId'> & { projectId?: string }) => void; projects: Project[], isVatEnabled: boolean, vatRate: number }) => {
     const [customer, setCustomer] = useState('');
     const [invoiceNumber, setInvoiceNumber] = useState('');
     const [invoiceDate, setInvoiceDate] = useState(CURRENT_DATE_ISO);
@@ -2992,6 +3127,9 @@ const InvoiceModal = ({ onClose, onCreate, projects }: { onClose: () => void; on
     const [amount, setAmount] = useState(0);
     const [taxable, setTaxable] = useState(false);
     const [projectId, setProjectId] = useState('');
+
+    const vatAmount = isVatEnabled && taxable ? amount * (vatRate / 100) : 0;
+    const totalAmount = amount + vatAmount;
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -3006,7 +3144,7 @@ const InvoiceModal = ({ onClose, onCreate, projects }: { onClose: () => void; on
                     <div className="form-grid">
                         <div className="form-group full-width"><label>Customer Name</label><input type="text" value={customer} onChange={e => setCustomer(e.target.value)} required /></div>
                         <div className="form-group"><label>Invoice #</label><input type="text" value={invoiceNumber} onChange={e => setInvoiceNumber(e.target.value)} required /></div>
-                        <div className="form-group"><label>Amount</label><input type="number" value={amount} onChange={e => setAmount(parseFloat(e.target.value))} required /></div>
+                        <div className="form-group"><label>Amount (pre-tax)</label><input type="number" value={amount} onChange={e => setAmount(parseFloat(e.target.value) || 0)} required /></div>
                         <div className="form-group"><label>Invoice Date</label><input type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} required /></div>
                         <div className="form-group"><label>Due Date</label><input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} required /></div>
                         <div className="form-group">
@@ -3016,8 +3154,13 @@ const InvoiceModal = ({ onClose, onCreate, projects }: { onClose: () => void; on
                                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                             </select>
                         </div>
-                        <div className="form-group form-group-checkbox"><label><input type="checkbox" checked={taxable} onChange={e => setTaxable(e.target.checked)} /> Is this sale taxable?</label></div>
+                        <div className="form-group form-group-checkbox"><label><input type="checkbox" checked={taxable} onChange={e => setTaxable(e.target.checked)} /> {isVatEnabled ? `Apply ${vatRate}% VAT` : `Is this sale taxable?`}</label></div>
                     </div>
+                     {isVatEnabled && taxable && (
+                        <div className="calculated-result">
+                            VAT: ${vatAmount.toFixed(2)} | <strong>Total: ${totalAmount.toFixed(2)}</strong>
+                        </div>
+                    )}
                     <div className="modal-actions">
                         <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
                         <button type="submit" className="btn-primary">Create Invoice</button>
@@ -3028,17 +3171,18 @@ const InvoiceModal = ({ onClose, onCreate, projects }: { onClose: () => void; on
     );
 };
 
-const BillModal = ({ onClose, onCreate, projects }: { onClose: () => void; onCreate: (data: Omit<Bill, 'id'|'status'|'relatedTransactionId'> & { projectId?: string }) => void; projects: Project[] }) => {
+const BillModal = ({ onClose, onCreate, projects, isVatEnabled }: { onClose: () => void; onCreate: (data: Omit<Bill, 'id'|'status'|'relatedTransactionId'> & { projectId?: string, vatAmount?: number }) => void; projects: Project[], isVatEnabled: boolean }) => {
     const [vendor, setVendor] = useState('');
     const [billNumber, setBillNumber] = useState('');
     const [billDate, setBillDate] = useState(CURRENT_DATE_ISO);
     const [dueDate, setDueDate] = useState('');
     const [amount, setAmount] = useState(0);
+    const [vatAmount, setVatAmount] = useState(0);
     const [projectId, setProjectId] = useState('');
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onCreate({ vendor, billNumber, billDate, dueDate, amount, projectId: projectId || undefined });
+        onCreate({ vendor, billNumber, billDate, dueDate, amount, projectId: projectId || undefined, vatAmount: isVatEnabled ? vatAmount : undefined });
     };
 
     return (
@@ -3049,10 +3193,11 @@ const BillModal = ({ onClose, onCreate, projects }: { onClose: () => void; onCre
                     <div className="form-grid">
                         <div className="form-group full-width"><label>Vendor Name</label><input type="text" value={vendor} onChange={e => setVendor(e.target.value)} required /></div>
                         <div className="form-group"><label>Bill #</label><input type="text" value={billNumber} onChange={e => setBillNumber(e.target.value)} /></div>
-                        <div className="form-group"><label>Amount</label><input type="number" value={amount} onChange={e => setAmount(parseFloat(e.target.value))} required /></div>
+                        <div className="form-group"><label>Amount (pre-tax)</label><input type="number" value={amount} onChange={e => setAmount(parseFloat(e.target.value) || 0)} required /></div>
+                        {isVatEnabled && <div className="form-group"><label>Input VAT Amount</label><input type="number" value={vatAmount} onChange={e => setVatAmount(parseFloat(e.target.value) || 0)} /></div>}
                         <div className="form-group"><label>Bill Date</label><input type="date" value={billDate} onChange={e => setBillDate(e.target.value)} required /></div>
                         <div className="form-group"><label>Due Date</label><input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} required /></div>
-                        <div className="form-group">
+                        <div className="form-group full-width">
                             <label>Assign to Project (Optional)</label>
                             <select value={projectId} onChange={e => setProjectId(e.target.value)}>
                                 <option value="">None</option>
@@ -3060,6 +3205,11 @@ const BillModal = ({ onClose, onCreate, projects }: { onClose: () => void; onCre
                             </select>
                         </div>
                     </div>
+                     {isVatEnabled && (
+                        <div className="calculated-result">
+                            <strong>Total Bill Amount: ${(amount + vatAmount).toFixed(2)}</strong>
+                        </div>
+                    )}
                     <div className="modal-actions">
                         <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
                         <button type="submit" className="btn-primary">Create Bill</button>
