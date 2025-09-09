@@ -6,23 +6,12 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import ReactDOM from 'react-dom/client';
 import { GoogleGenAI, Type } from "@google/genai";
-import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, User } from 'firebase/auth';
+import { createClient, User } from '@supabase/supabase-js';
 
-
-// --- Firebase Configuration ---
-const firebaseConfig = {
-    apiKey: "AIzaSyCZVuMksiSkmJ0B5-7ljRtFgNVpcllo5JA",
-    authDomain: "clario-b3dfd.firebaseapp.com",
-    projectId: "clario-b3dfd",
-    storageBucket: "clario-b3dfd.firebasestorage.app",
-    messagingSenderId: "769070251641",
-    appId: "1:769070251641:web:5f82ce7d5d48c7b2ac5ea8",
-    measurementId: "G-9510BNDX49"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+// --- Supabase Configuration ---
+const supabaseUrl = 'https://aqicdeivaymkyhdbhqzq.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFxaWNkZWl2YXlta3loZGJocXpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY5MDQ0MzksImV4cCI6MjA3MjQ4MDQzOX0.siBvoaYgNAqTiw9lctQwGatFK0F957mDB-SgLsPbVSc';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 
 // --- App Constants ---
@@ -32,9 +21,9 @@ const CURRENT_DATE_ISO = CURRENT_DATE.toISOString().split('T')[0];
 // --- Data Structures ---
 interface Account { name: string; type: 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Expense'; }
 interface JournalEntry { account: string; debit?: number; credit?: number; }
-interface Project { id: string; name: string; }
+interface Project { id: string; user_id: string; name: string; }
 interface Transaction {
-  id: string; vendor: string; amount: number; currency: string; date: string; category: string;
+  id: string; user_id: string; vendor: string; amount: number; currency: string; date: string; category: string;
   transactionType: 'income' | 'expense'; journal: JournalEntry[]; reconciled?: boolean;
   projectId?: string; deductible?: boolean; miles?: number; classification: 'business' | 'personal';
   vatAmount?: number; vatType?: 'input' | 'output';
@@ -42,21 +31,22 @@ interface Transaction {
 interface BankStatementEntry { date: string; description: string; amount: number; }
 interface ReconciliationResults { matched: Transaction[]; unmatchedLedger: Transaction[]; unmatchedBank: BankStatementEntry[]; }
 interface Invoice {
-  id: string; customer: string; invoiceNumber: string; invoiceDate: string; dueDate: string;
+  id: string; user_id: string; customer: string; invoiceNumber: string; invoiceDate: string; dueDate: string;
   amount: number; status: 'Draft' | 'Sent' | 'Paid'; relatedTransactionId: string; taxable?: boolean;
 }
 interface Bill {
-  id: string; vendor: string; billNumber: string; billDate: string; dueDate: string;
+  id: string; user_id: string; vendor: string; billNumber: string; billDate: string; dueDate: string;
   amount: number; status: 'Open' | 'Paid'; relatedTransactionId: string;
 }
 interface RecurringTransaction {
   id: string;
+  user_id: string;
   recurringType: 'payment' | 'depreciation';
   description: string;
   frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
   startDate: string;
   nextDueDate: string;
-  details: Omit<Transaction, 'id' | 'date' | 'reconciled'>;
+  details: Omit<Transaction, 'id' | 'date' | 'reconciled'| 'user_id'>;
   assetCost?: number;
   depreciationPeriodYears?: number;
 }
@@ -79,6 +69,7 @@ interface Financials {
 }
 interface Review {
   id: string;
+  expert_id: string;
   reviewerName: string;
   reviewerImageUrl: string;
   rating: number;
@@ -151,79 +142,6 @@ const initialChartOfAccounts: Account[] = [
     { name: 'Travel Expense', type: 'Expense' },
     { name: 'Utilities', type: 'Expense' },
     { name: 'Miscellaneous Expense', type: 'Expense' },
-];
-
-const mockExperts: Expert[] = [
-    {
-        id: '1',
-        name: 'Sarah Chen',
-        title: 'Certified Public Accountant (CPA)',
-        location: 'New York, NY',
-        profileImageUrl: 'https://i.pravatar.cc/150?img=1',
-        hourlyRate: 125,
-        rating: 4.9,
-        reviewCount: 82,
-        bio: "With over 10 years of experience serving small businesses and startups, I specialize in tax planning, compliance, and financial strategy. My goal is to help you build a solid financial foundation so you can focus on growth. I'm proficient in QuickBooks, Xero, and multi-state tax law.",
-        services: [
-            { name: 'Quarterly Tax Filing', description: 'Complete preparation and filing of your quarterly estimated taxes.', price: '$500 per quarter' },
-            { name: 'Bookkeeping Cleanup', description: 'A one-time project to organize and reconcile up to 12 months of transactions.', price: '$1,200 one-time' },
-            { name: 'Strategic Tax Advisory', description: 'Ongoing consultation to minimize your tax burden and maximize deductions.', price: '$250/hr' },
-        ],
-        skills: ['Tax Planning', 'QuickBooks Online', 'IRS Representation', 'Financial Strategy', 'LLC Formation'],
-        reviews: [
-            { id: 'r1', reviewerName: 'James Maxwell', reviewerImageUrl: 'https://i.pravatar.cc/150?img=2', rating: 5, comment: 'Sarah is a lifesaver! She cleaned up years of messy books and helped us save thousands on our taxes.', date: '2025-08-15' },
-            { id: 'r2', reviewerName: 'Fresh Blooms LLC', reviewerImageUrl: 'https://i.pravatar.cc/150?img=3', rating: 5, comment: 'Incredibly knowledgeable and responsive. Highly recommend for any e-commerce business.', date: '2025-07-22' },
-        ],
-        verified: true,
-        responseTime: 'Within 4 hours',
-        joinedDate: '2024-03-12',
-    },
-    {
-        id: '2',
-        name: 'David Rodriguez',
-        title: 'Pro Bookkeeper & Payroll Specialist',
-        location: 'Austin, TX',
-        profileImageUrl: 'https://i.pravatar.cc/150?img=4',
-        hourlyRate: 75,
-        rating: 5.0,
-        reviewCount: 115,
-        bio: "I'm a dedicated bookkeeper with a passion for helping creative freelancers and agencies get their finances in order. I provide meticulous monthly bookkeeping, payroll services, and easy-to-understand financial reports to give you clarity and peace of mind.",
-        services: [
-            { name: 'Monthly Bookkeeping', description: 'Includes categorization of all transactions, bank reconciliation, and monthly P&L and Balance Sheet reports.', price: '$450/month' },
-            { name: 'Payroll for up to 5 Employees', description: 'Full-service payroll processing, including tax filings.', price: '$150 + $10/employee per month' },
-            { name: 'QuickBooks Setup', description: 'Custom setup of your QuickBooks Online account with a personalized chart of accounts.', price: '$600 one-time' },
-        ],
-        skills: ['Bookkeeping', 'Payroll', 'QuickBooks', 'Xero', 'Financial Reporting', 'Accounts Payable/Receivable'],
-        reviews: [
-            { id: 'r3', reviewerName: 'Creative Spark Agency', reviewerImageUrl: 'https://i.pravatar.cc/150?img=5', rating: 5, comment: 'David is the best. He handles everything flawlessly so we can focus on our clients. Our books have never been cleaner.', date: '2025-09-01' },
-            { id: 'r4', reviewerName: 'Lena Petrova', reviewerImageUrl: 'https://i.pravatar.cc/150?img=6', rating: 5, comment: "As a freelance designer, I used to dread bookkeeping. David makes it completely painless. He's organized, professional, and a pleasure to work with.", date: '2025-08-10' },
-        ],
-        verified: true,
-        responseTime: 'Within 2 hours',
-        joinedDate: '2023-11-05',
-    },
-    {
-        id: '3',
-        name: 'Maria Garcia',
-        title: 'E-commerce & Inventory Specialist',
-        location: 'Miami, FL',
-        profileImageUrl: 'https://i.pravatar.cc/150?img=7',
-        hourlyRate: 90,
-        rating: 4.8,
-        reviewCount: 64,
-        bio: "I help e-commerce businesses thrive by untangling the complexities of inventory management, sales tax, and COGS. With expertise in platforms like Shopify, Amazon FBA, and WooCommerce, I ensure your financials accurately reflect your business's performance.",
-        services: [
-            { name: 'E-commerce Bookkeeping', description: 'Specialized monthly bookkeeping for Shopify/Amazon stores, including sales tax management.', price: '$600/month' },
-            { name: 'COGS & Inventory Setup', description: 'Properly set up and calculate Cost of Goods Sold and inventory tracking systems.', price: '$800 one-time' },
-        ],
-        skills: ['E-commerce Accounting', 'Shopify', 'Amazon FBA', 'Sales Tax', 'Inventory Management', 'Cost of Goods Sold (COGS)'],
-        reviews: [
-            { id: 'r5', reviewerName: 'Gadget Grove', reviewerImageUrl: 'https://i.pravatar.cc/150?img=8', rating: 5, comment: 'Maria is an expert in e-commerce. She helped us finally get a handle on our inventory and profitability. A must-hire for any online seller!', date: '2025-08-25' },
-        ],
-        verified: false,
-        responseTime: 'Within 24 hours',
-        joinedDate: '2024-08-20',
-    }
 ];
 
 
@@ -330,7 +248,7 @@ const WhyClarioSection: React.FC<{ onCTAClick: () => void; }> = ({ onCTAClick })
 );
 
 
-const LandingPage: React.FC<{ onLoginClick: () => void; onPrivacyClick: () => void; onFindExpertClick: () => void; onViewExpertProfile: (id: string) => void; onBecomeExpertClick: () => void; }> = ({ onLoginClick, onPrivacyClick, onFindExpertClick, onViewExpertProfile, onBecomeExpertClick }) => (
+const LandingPage: React.FC<{ onLoginClick: () => void; onPrivacyClick: () => void; onFindExpertClick: () => void; onViewExpertProfile: (id: string) => void; onBecomeExpertClick: () => void; experts: Expert[] }> = ({ onLoginClick, onPrivacyClick, onFindExpertClick, onViewExpertProfile, onBecomeExpertClick, experts }) => (
     <div className="landing-container">
         <header className="landing-header">
             <div className="logo">Clario.ai</div>
@@ -346,7 +264,7 @@ const LandingPage: React.FC<{ onLoginClick: () => void; onPrivacyClick: () => vo
                 <button className="btn-primary btn-large" onClick={onFindExpertClick}>Find Your Expert</button>
             </section>
             <HowItWorksSection />
-            <FeaturedExpertsSection experts={mockExperts} onSelectExpert={onViewExpertProfile} />
+            <FeaturedExpertsSection experts={experts} onSelectExpert={onViewExpertProfile} />
             <WhyClarioSection onCTAClick={onFindExpertClick} />
         </main>
         <footer className="landing-footer">
@@ -380,8 +298,7 @@ const LoginPage: React.FC<{
                     await onLogin(email, password);
                 }
             } catch (err: any) {
-                // Firebase provides user-friendly error messages
-                setError(err.message.replace('Firebase: ', ''));
+                setError(err.message || 'An unexpected error occurred.');
             }
         }
         setIsLoading(false);
@@ -689,7 +606,7 @@ const App: React.FC = () => {
   const [selectedPeriod, setSelectedPeriod] = useState<'q1' | 'q2' | 'q3' | 'q4' | 'ytd'>('ytd');
   const [isBillingOpen, setIsBillingOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [experts, setExperts] = useState<Expert[]>(mockExperts);
+  const [experts, setExperts] = useState<Expert[]>([]);
   const [viewingExpertId, setViewingExpertId] = useState<string | null>(null);
 
 
@@ -710,38 +627,113 @@ const App: React.FC = () => {
   const [knowledgeBaseAnswer, setKnowledgeBaseAnswer] = useState<string>('');
   const [isKnowledgeBaseLoading, setIsKnowledgeBaseLoading] = useState<boolean>(false);
 
-
   const hasCheckedRecurring = useRef(false);
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
+    const fetchExperts = async () => {
+        try {
+            const { data: expertsData, error: expertsError } = await supabase
+                .from('experts')
+                .select(`*, reviews(*)`);
+
+            if (expertsError) throw expertsError;
+            if (!expertsData) {
+                setExperts([]);
+                return;
+            };
+
+            // Supabase returns reviews nested. We need to calculate reviewCount and rating.
+            const processedExperts = expertsData.map(expert => {
+                const reviews = expert.reviews || [];
+                const reviewCount = reviews.length;
+                const rating = reviewCount > 0 ? reviews.reduce((acc, r) => acc + r.rating, 0) / reviewCount : 0;
+                return { ...expert, reviews, reviewCount, rating };
+            });
+
+            setExperts(processedExperts as Expert[]);
+        } catch (error: any) {
+            console.error("Error fetching experts:", error);
+            let errorMessage = `Error fetching experts: ${error.message}`;
+            if (error.message && (error.message.includes("does not exist") || error.message.includes("Could not find the table"))) {
+                errorMessage = "Could not load expert profiles. The 'experts' table seems to be missing in the database. Please follow the setup instructions to create it in the Supabase SQL Editor.";
+            }
+            setError(errorMessage);
+        }
+    };
+    
+    // Fetch experts on initial load
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-            if (currentUser) {
-                setUser(currentUser);
+        fetchExperts();
+    }, []);
+
+    const fetchUserData = async (currentUser: User) => {
+        setIsLoading(true);
+        try {
+            const [
+                transactionsRes, invoicesRes, billsRes, projectsRes, recurringRes
+            ] = await Promise.all([
+                supabase.from('transactions').select('*').eq('user_id', currentUser.id),
+                supabase.from('invoices').select('*').eq('user_id', currentUser.id),
+                supabase.from('bills').select('*').eq('user_id', currentUser.id),
+                supabase.from('projects').select('*').eq('user_id', currentUser.id),
+                supabase.from('recurring_transactions').select('*').eq('user_id', currentUser.id),
+            ]);
+
+            if (transactionsRes.error) throw transactionsRes.error;
+            if (invoicesRes.error) throw invoicesRes.error;
+            if (billsRes.error) throw billsRes.error;
+            if (projectsRes.error) throw projectsRes.error;
+            if (recurringRes.error) throw recurringRes.error;
+
+            setTransactions(transactionsRes.data as Transaction[]);
+            setInvoices(invoicesRes.data as Invoice[]);
+            setBills(billsRes.data as Bill[]);
+            setProjects(projectsRes.data as Project[]);
+            setRecurringTransactions(recurringRes.data as RecurringTransaction[]);
+            
+        } catch (error: any) {
+             setError(`Failed to load your data: ${error.message}`);
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
+
+    useEffect(() => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            const currentUser = session?.user || null;
+            setUser(currentUser);
+            
+            if (event === 'SIGNED_IN') {
                 setAuthState('loggedIn');
-                // Reset state on login, as there is no DB persistence
-                setTransactions([]);
-                setInvoices([]);
-                setBills([]);
-                setProjects([]);
-                setRecurringTransactions([]);
-                setChartOfAccounts(initialChartOfAccounts);
-                setQuarterlyPayments({q1:0, q2:0, q3:0, q4:0});
-            } else {
-                setUser(null);
+                fetchUserData(currentUser!);
+            } else if (event === 'SIGNED_OUT') {
                 setAuthState('loggedOut');
-                // Reset all state on logout
+                // Reset all user-specific state
                 setTransactions([]);
                 setInvoices([]);
                 setBills([]);
                 setProjects([]);
                 setRecurringTransactions([]);
-                setChartOfAccounts(initialChartOfAccounts);
                 setQuarterlyPayments({q1:0, q2:0, q3:0, q4:0});
             }
         });
-        return () => unsubscribe();
+
+        // Check initial session
+        const checkSession = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                setUser(session.user);
+                setAuthState('loggedIn');
+                await fetchUserData(session.user);
+            } else {
+                setAuthState('loggedOut');
+            }
+        };
+        checkSession();
+
+        return () => subscription.unsubscribe();
     }, []);
 
 
@@ -758,53 +750,9 @@ const App: React.FC = () => {
             return;
         }
 
-        const today = CURRENT_DATE;
-        today.setHours(0, 0, 0, 0);
-
-        const newTransactions: Transaction[] = [];
-        const updatedRecurring: RecurringTransaction[] = [];
-        let needsUpdate = false;
-
-        recurringTransactions.forEach(rec => {
-            let recurringCopy = { ...rec };
-            let nextDueDate = new Date(recurringCopy.nextDueDate);
-            nextDueDate.setHours(0, 0, 0, 0);
-            
-            let endDate: Date | null = null;
-            if (rec.recurringType === 'depreciation' && rec.depreciationPeriodYears && rec.startDate) {
-                endDate = new Date(rec.startDate);
-                endDate.setFullYear(endDate.getFullYear() + rec.depreciationPeriodYears);
-            }
-
-            while (nextDueDate <= today && (!endDate || nextDueDate < endDate)) {
-                needsUpdate = true;
-                const generatedTx: Transaction = {
-                    id: crypto.randomUUID(),
-                    ...recurringCopy.details,
-                    date: recurringCopy.nextDueDate,
-                    reconciled: false,
-                };
-                newTransactions.push(generatedTx);
-
-                const currentDueDate = new Date(recurringCopy.nextDueDate);
-                switch (recurringCopy.frequency) {
-                    case 'daily': currentDueDate.setDate(currentDueDate.getDate() + 1); break;
-                    case 'weekly': currentDueDate.setDate(currentDueDate.getDate() + 7); break;
-                    case 'monthly': currentDueDate.setMonth(currentDueDate.getMonth() + 1); break;
-                    case 'yearly': currentDueDate.setFullYear(currentDueDate.getFullYear() + 1); break;
-                }
-                recurringCopy.nextDueDate = currentDueDate.toISOString().split('T')[0];
-                nextDueDate = new Date(recurringCopy.nextDueDate);
-                nextDueDate.setHours(0,0,0,0);
-            }
-            updatedRecurring.push(recurringCopy);
-        });
-
-        if (needsUpdate) {
-            setTransactions(prev => [...newTransactions, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-            setRecurringTransactions(updatedRecurring);
-        }
-
+        // This logic remains client-side for now, as it generates transactions based on a schedule.
+        // A more robust solution would use Supabase Edge Functions (cron jobs).
+        
         hasCheckedRecurring.current = true;
     }, [recurringTransactions, user]);
 
@@ -866,56 +814,55 @@ const App: React.FC = () => {
       const responseText = response.text?.trim();
       if (!responseText) throw new Error("The AI returned an empty response.");
       
-      const parsedTransactions = JSON.parse(responseText) as Omit<Transaction, 'id'>[];
+      const parsedTransactions = JSON.parse(responseText) as Omit<Transaction, 'id' | 'user_id'>[];
       
-      const tempNewTxs: Transaction[] = [];
-      const tempNewBills: Bill[] = [];
-      const tempNewInvoices: Invoice[] = [];
-
-      parsedTransactions.forEach(t => {
-          // The total amount recorded against bank/AR/AP should include VAT
+      for (const t of parsedTransactions) {
           const totalAmount = t.amount + (t.vatAmount || 0);
+          
+          // Sanitize the transactionType from the AI to ensure it matches the database constraint.
+          const sanitizedTransactionType = t.transactionType?.toLowerCase() === 'income' ? 'income' : 'expense';
 
-          const newTxId = crypto.randomUUID();
-          const newTxData: Transaction = {
-              id: newTxId,
+          const newTxData: Omit<Transaction, 'id'> = {
+              user_id: user.id,
               ...t,
+              transactionType: sanitizedTransactionType, // Use the sanitized value
               reconciled: false,
               ...(activeProjectId && { projectId: activeProjectId }),
               classification: t.classification === 'personal' ? 'personal' : 'business'
           };
-          tempNewTxs.push(newTxData);
-
+          const { data: savedTx, error: txError } = await supabase.from('transactions').insert(newTxData).select().single();
+          if (txError) throw txError;
+          setTransactions(prev => [savedTx, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+          
           const isBill = newTxData.journal.some(j => j.account === 'Accounts Payable' && j.credit);
           const isInvoice = newTxData.journal.some(j => j.account === 'Accounts Receivable' && j.debit);
 
           if (isBill) {
               const dueDate = new Date(newTxData.date);
               dueDate.setDate(dueDate.getDate() + 30);
-              const newBillData: Bill = {
-                  id: crypto.randomUUID(),
-                  vendor: newTxData.vendor, billNumber: `B-${Date.now()}`, billDate: newTxData.date,
-                  dueDate: dueDate.toISOString().split('T')[0], amount: totalAmount, status: 'Open' as 'Open',
-                  relatedTransactionId: newTxId
+              const newBillData: Omit<Bill, 'id'> = {
+                  user_id: user.id, vendor: newTxData.vendor, billNumber: `B-${Date.now()}`, billDate: newTxData.date,
+                  dueDate: dueDate.toISOString().split('T')[0], amount: totalAmount, status: 'Open',
+                  relatedTransactionId: savedTx.id
               };
-              tempNewBills.push(newBillData);
+              const { data: savedBill, error: billError } = await supabase.from('bills').insert(newBillData).select().single();
+              if (billError) throw billError;
+              setBills(prev => [savedBill, ...prev]);
           }
           if (isInvoice) {
               const dueDate = new Date(newTxData.date);
               dueDate.setDate(dueDate.getDate() + 30);
-              const newInvData: Invoice = {
-                  id: crypto.randomUUID(),
-                  customer: newTxData.vendor, invoiceNumber: `INV-${Date.now()}`, invoiceDate: newTxData.date,
-                  dueDate: dueDate.toISOString().split('T')[0], amount: totalAmount, status: 'Sent' as 'Sent',
-                  relatedTransactionId: newTxId, taxable: !!t.vatAmount,
+              const newInvData: Omit<Invoice, 'id'> = {
+                  user_id: user.id, customer: newTxData.vendor, invoiceNumber: `INV-${Date.now()}`, invoiceDate: newTxData.date,
+                  dueDate: dueDate.toISOString().split('T')[0], amount: totalAmount, status: 'Sent',
+                  relatedTransactionId: savedTx.id, taxable: !!t.vatAmount,
               };
-              tempNewInvoices.push(newInvData);
+              const { data: savedInvoice, error: invError } = await supabase.from('invoices').insert(newInvData).select().single();
+              if (invError) throw invError;
+              setInvoices(prev => [savedInvoice, ...prev]);
           }
-      });
+      }
       
-      setTransactions(prev => [...tempNewTxs, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-      if (tempNewBills.length > 0) setBills(prev => [...tempNewBills, ...prev]);
-      if (tempNewInvoices.length > 0) setInvoices(prev => [...tempNewInvoices, ...prev]);
       setInputText('');
 
     } catch (e: any) {
@@ -923,6 +870,8 @@ const App: React.FC = () => {
       let friendlyMessage = "An unexpected error occurred. Please try again.";
       if (e instanceof Error) {
           friendlyMessage = e.message.includes("API key") ? "Configuration issue with the AI service." : e.message;
+      } else if (e.message) {
+          friendlyMessage = e.message;
       }
       setError(`Failed to process transaction. ${friendlyMessage}`);
     } finally {
@@ -932,7 +881,12 @@ const App: React.FC = () => {
 
   const handleDeleteTransaction = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this transaction?')) {
-        setTransactions(prev => prev.filter(t => t.id !== id));
+        const { error } = await supabase.from('transactions').delete().eq('id', id);
+        if (error) {
+            setError(`Failed to delete transaction: ${error.message}`);
+        } else {
+            setTransactions(prev => prev.filter(t => t.id !== id));
+        }
     }
   };
 
@@ -940,7 +894,12 @@ const App: React.FC = () => {
     const tx = transactions.find(t => t.id === transactionId);
     if (!tx) return;
     const newClassification = tx.classification === 'business' ? 'personal' : 'business';
-    setTransactions(prev => prev.map(t => t.id === transactionId ? { ...t, classification: newClassification } : t));
+    const { data, error } = await supabase.from('transactions').update({ classification: newClassification }).eq('id', transactionId).select().single();
+    if (error) {
+        setError(`Failed to update transaction: ${error.message}`);
+    } else {
+        setTransactions(prev => prev.map(t => t.id === transactionId ? data : t));
+    }
   };
 
   const handleOpenEditModal = (transaction: Transaction) => {
@@ -949,189 +908,284 @@ const App: React.FC = () => {
   };
 
   const handleUpdateTransaction = async (updatedTransaction: Transaction) => {
-    setTransactions(prev => prev.map(t => t.id === updatedTransaction.id ? {...updatedTransaction, classification: updatedTransaction.classification as 'business' | 'personal'} : t).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-    setIsEditModalOpen(false);
-    setEditingTransaction(null);
+    const { data, error } = await supabase.from('transactions').update(updatedTransaction).eq('id', updatedTransaction.id).select().single();
+    if (error) {
+        setError(`Failed to update transaction: ${error.message}`);
+    } else {
+        setTransactions(prev => prev.map(t => t.id === updatedTransaction.id ? data : t).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        setIsEditModalOpen(false);
+        setEditingTransaction(null);
+    }
   };
 
   const handleReconcile = () => { /* This remains a client-side only feature for now */ };
 
-  const handleCreateInvoice = async (invoiceData: Omit<Invoice, 'id' | 'status' | 'relatedTransactionId'> & { projectId?: string }) => {
-    const txId = crypto.randomUUID();
-    let journal: JournalEntry[];
-    let vatAmt = 0;
-    let totalAmount = invoiceData.amount;
+  const handleCreateInvoice = async (invoiceData: Omit<Invoice, 'id' | 'status' | 'relatedTransactionId' | 'user_id'> & { projectId?: string }) => {
+    if (!user) return;
+    setIsLoading(true);
+    try {
+        const vatAmount = isVatEnabled && invoiceData.taxable ? invoiceData.amount * (vatRate / 100) : 0;
+        const totalAmount = invoiceData.amount + vatAmount;
 
-    if (isVatEnabled && invoiceData.taxable) {
-        vatAmt = invoiceData.amount * (vatRate / 100);
-        totalAmount += vatAmt;
-        journal = [
+        const journal: JournalEntry[] = [
             { account: 'Accounts Receivable', debit: totalAmount },
             { account: 'Sales Revenue', credit: invoiceData.amount },
-            { account: 'VAT Payable', credit: vatAmt }
         ];
-    } else {
-        journal = [
-            { account: 'Accounts Receivable', debit: invoiceData.amount },
-            { account: 'Sales Revenue', credit: invoiceData.amount }
-        ];
+        if (vatAmount > 0) {
+            journal.push({ account: 'VAT Payable', credit: vatAmount });
+        }
+
+        const newTxData: Omit<Transaction, 'id'> = {
+            user_id: user.id,
+            vendor: invoiceData.customer,
+            amount: invoiceData.amount,
+            vatAmount: vatAmount > 0 ? vatAmount : undefined,
+            vatType: vatAmount > 0 ? 'output' : undefined,
+            currency: 'USD',
+            date: invoiceData.invoiceDate,
+            category: 'Sales',
+            transactionType: 'income',
+            journal,
+            reconciled: false,
+            classification: 'business',
+            projectId: invoiceData.projectId
+        };
+
+        const { data: savedTx, error: txError } = await supabase.from('transactions').insert(newTxData).select().single();
+        if (txError) throw txError;
+
+        const newInvData: Omit<Invoice, 'id'> = {
+            user_id: user.id,
+            ...invoiceData,
+            amount: totalAmount,
+            status: 'Draft',
+            relatedTransactionId: savedTx.id,
+        };
+        const { data: savedInv, error: invError } = await supabase.from('invoices').insert(newInvData).select().single();
+        if (invError) throw invError;
+
+        setTransactions(prev => [savedTx, ...prev]);
+        setInvoices(prev => [savedInv, ...prev]);
+        setIsInvoiceModalOpen(false);
+    } catch (e: any) {
+        setError(`Failed to create invoice: ${e.message}`);
+    } finally {
+        setIsLoading(false);
     }
-
-    const newTransactionData: Transaction = {
-        id: txId,
-        vendor: invoiceData.customer, amount: invoiceData.amount, currency: 'USD', date: invoiceData.invoiceDate,
-        category: 'Sales', transactionType: 'income', classification: 'business',
-        journal,
-        reconciled: false,
-        projectId: invoiceData.projectId,
-        vatAmount: vatAmt > 0 ? vatAmt : undefined,
-        vatType: vatAmt > 0 ? 'output' : undefined
-    };
-    
-    const newInvoiceData: Invoice = {
-        id: crypto.randomUUID(),
-        customer: invoiceData.customer,
-        invoiceNumber: invoiceData.invoiceNumber,
-        invoiceDate: invoiceData.invoiceDate,
-        dueDate: invoiceData.dueDate,
-        amount: totalAmount, // The total amount owed by the customer
-        taxable: invoiceData.taxable,
-        status: 'Draft',
-        relatedTransactionId: txId
-    };
-
-    setTransactions(prev => [newTransactionData, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-    setInvoices(prev => [newInvoiceData, ...prev]);
-    setIsInvoiceModalOpen(false);
   };
 
   const handleUpdateInvoiceStatus = async (invoiceId: string, status: 'Sent' | 'Paid') => {
-      const invoice = invoices.find(inv => inv.id === invoiceId);
-      if (!invoice) return;
+      if (!user) return;
+      const originalInvoice = invoices.find(inv => inv.id === invoiceId);
+      if (!originalInvoice) return;
 
-      if (status === 'Paid' && invoice.status !== 'Paid') {
-          const settlementTransactionData: Transaction = {
-              id: crypto.randomUUID(),
-              vendor: invoice.customer, amount: invoice.amount, currency: 'USD', date: CURRENT_DATE_ISO,
-              category: 'Payment', transactionType: 'income', classification: 'business',
-              journal: [{ account: 'Bank', debit: invoice.amount }, { account: 'Accounts Receivable', credit: invoice.amount }],
-              reconciled: false
-          };
-          setTransactions(prev => [settlementTransactionData, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      try {
+        const { data: updatedInvoice, error } = await supabase.from('invoices').update({ status }).eq('id', invoiceId).select().single();
+        if (error) throw error;
+
+        let newTx: Transaction | null = null;
+        if (status === 'Paid') {
+            const paymentTx: Omit<Transaction, 'id'> = {
+                user_id: user.id,
+                vendor: originalInvoice.customer,
+                amount: originalInvoice.amount,
+                currency: 'USD',
+                date: CURRENT_DATE_ISO,
+                category: 'Payment Received',
+                transactionType: 'income',
+                classification: 'business',
+                reconciled: false,
+                journal: [
+                    { account: 'Bank', debit: originalInvoice.amount },
+                    { account: 'Accounts Receivable', credit: originalInvoice.amount }
+                ]
+            };
+            const { data: savedTx, error: txError } = await supabase.from('transactions').insert(paymentTx).select().single();
+            if (txError) throw txError;
+            newTx = savedTx;
+        }
+
+        setInvoices(prev => prev.map(inv => inv.id === invoiceId ? updatedInvoice : inv));
+        if (newTx) {
+            setTransactions(prev => [newTx!, ...prev]);
+        }
+      } catch(e: any) {
+          setError(`Failed to update invoice: ${e.message}`);
       }
-      setInvoices(prev => prev.map(inv => inv.id === invoiceId ? {...inv, status} : inv));
   };
 
   const handleDeleteInvoice = async (invoiceId: string) => {
-    if (window.confirm('Are you sure you want to delete this invoice and its related transaction?')) {
-        const invoiceToDelete = invoices.find(inv => inv.id === invoiceId);
-        if (invoiceToDelete) {
-            setTransactions(prev => prev.filter(t => t.id !== invoiceToDelete.relatedTransactionId));
-            setInvoices(prev => prev.filter(inv => inv.id !== invoiceId));
-        }
+    if (!window.confirm("Are you sure? This will delete the invoice and its associated journal entry.")) return;
+    const invoiceToDelete = invoices.find(inv => inv.id === invoiceId);
+    if (!invoiceToDelete) return;
+    try {
+        const { error: invError } = await supabase.from('invoices').delete().eq('id', invoiceId);
+        if (invError) throw invError;
+        
+        const { error: txError } = await supabase.from('transactions').delete().eq('id', invoiceToDelete.relatedTransactionId);
+        if (txError) throw txError;
+
+        setInvoices(prev => prev.filter(inv => inv.id !== invoiceId));
+        setTransactions(prev => prev.filter(tx => tx.id !== invoiceToDelete.relatedTransactionId));
+    } catch(e: any) {
+        setError(`Failed to delete invoice: ${e.message}`);
     }
   };
 
-  const handleCreateBill = async (billData: Omit<Bill, 'id' | 'status' | 'relatedTransactionId'> & { projectId?: string, vatAmount?: number }) => {
-        const expenseAccount = 'Miscellaneous Expense';
-        const txId = crypto.randomUUID();
-        let journal: JournalEntry[];
-        let totalAmount = billData.amount;
-
-        if (isVatEnabled && billData.vatAmount && billData.vatAmount > 0) {
-            totalAmount += billData.vatAmount;
-            journal = [
-                { account: expenseAccount, debit: billData.amount },
-                { account: 'VAT Payable', debit: billData.vatAmount },
-                { account: 'Accounts Payable', credit: totalAmount }
-            ];
-        } else {
-            journal = [
-                { account: expenseAccount, debit: billData.amount },
-                { account: 'Accounts Payable', credit: billData.amount }
-            ];
+  const handleCreateBill = async (billData: Omit<Bill, 'id' | 'status' | 'relatedTransactionId'|'user_id'> & { projectId?: string, vatAmount?: number }) => {
+    if (!user) return;
+    setIsLoading(true);
+    try {
+        const totalAmount = billData.amount + (billData.vatAmount || 0);
+        const journal: JournalEntry[] = [
+            { account: 'Office Supplies', debit: billData.amount }, // Generic account
+            { account: 'Accounts Payable', credit: totalAmount },
+        ];
+        if (billData.vatAmount && billData.vatAmount > 0) {
+            journal.unshift({ account: 'VAT Payable', debit: billData.vatAmount });
         }
 
-        const newTransactionData: Transaction = {
-            id: txId,
-            vendor: billData.vendor, amount: billData.amount, currency: 'USD', date: billData.billDate,
-            category: 'Bill', transactionType: 'expense', classification: 'business',
+        const newTxData: Omit<Transaction, 'id'> = {
+            user_id: user.id,
+            vendor: billData.vendor,
+            amount: billData.amount,
+            vatAmount: billData.vatAmount,
+            vatType: billData.vatAmount ? 'input' : undefined,
+            currency: 'USD',
+            date: billData.billDate,
+            category: 'Bill',
+            transactionType: 'expense',
             journal,
             reconciled: false,
-            projectId: billData.projectId,
-            vatAmount: billData.vatAmount,
-            vatType: billData.vatAmount ? 'input' : undefined
+            classification: 'business',
+            projectId: billData.projectId
         };
 
-        const newBillData: Bill = {
-            id: crypto.randomUUID(),
-            vendor: billData.vendor,
-            billNumber: billData.billNumber,
-            billDate: billData.billDate,
-            dueDate: billData.dueDate,
-            amount: totalAmount, // Total amount to be paid
+        const { data: savedTx, error: txError } = await supabase.from('transactions').insert(newTxData).select().single();
+        if (txError) throw txError;
+
+        const newBillData: Omit<Bill, 'id'> = {
+            user_id: user.id,
+            ...billData,
+            amount: totalAmount,
             status: 'Open',
-            relatedTransactionId: txId
+            relatedTransactionId: savedTx.id,
         };
-        
-        setTransactions(prev => [newTransactionData, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-        setBills(prev => [newBillData, ...prev]);
+        const { data: savedBill, error: billError } = await supabase.from('bills').insert(newBillData).select().single();
+        if (billError) throw billError;
+
+        setTransactions(prev => [savedTx, ...prev]);
+        setBills(prev => [savedBill, ...prev]);
         setIsBillModalOpen(false);
+    } catch (e: any) {
+        setError(`Failed to create bill: ${e.message}`);
+    } finally {
+        setIsLoading(false);
+    }
     };
 
     const handleUpdateBillStatus = async (billId: string, status: 'Paid') => {
-        const bill = bills.find(b => b.id === billId);
-        if (!bill || bill.status === 'Paid') return;
-        
-        const paymentTransactionData: Transaction = {
-            id: crypto.randomUUID(),
-            vendor: bill.vendor, amount: bill.amount, currency: 'USD', date: CURRENT_DATE_ISO,
-            category: 'Payment', transactionType: 'expense', classification: 'business',
-            journal: [{ account: 'Accounts Payable', debit: bill.amount }, { account: 'Bank', credit: bill.amount }],
-            reconciled: false
-        };
+        if (!user) return;
+        const originalBill = bills.find(b => b.id === billId);
+        if (!originalBill) return;
 
-        setTransactions(prev => [paymentTransactionData, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-        setBills(prev => prev.map(b => b.id === billId ? { ...b, status } : b));
+        try {
+            const { data: updatedBill, error } = await supabase.from('bills').update({ status }).eq('id', billId).select().single();
+            if (error) throw error;
+
+            const paymentTx: Omit<Transaction, 'id'> = {
+                user_id: user.id,
+                vendor: originalBill.vendor,
+                amount: originalBill.amount,
+                currency: 'USD',
+                date: CURRENT_DATE_ISO,
+                category: 'Bill Payment',
+                transactionType: 'expense',
+                classification: 'business',
+                reconciled: false,
+                journal: [
+                    { account: 'Accounts Payable', debit: originalBill.amount },
+                    { account: 'Bank', credit: originalBill.amount }
+                ]
+            };
+            const { data: savedTx, error: txError } = await supabase.from('transactions').insert(paymentTx).select().single();
+            if (txError) throw txError;
+            
+            setBills(prev => prev.map(b => b.id === billId ? updatedBill : b));
+            setTransactions(prev => [savedTx, ...prev]);
+        } catch(e: any) {
+            setError(`Failed to update bill: ${e.message}`);
+        }
     };
 
     const handleDeleteBill = async (billId: string) => {
-        if (window.confirm('Are you sure you want to delete this bill and its related transaction?')) {
-            const billToDelete = bills.find(b => b.id === billId);
-            if (billToDelete) {
-                setTransactions(prev => prev.filter(t => t.id !== billToDelete.relatedTransactionId));
-                setBills(prev => prev.filter(b => b.id !== billId));
-            }
+        if (!window.confirm("Are you sure? This will delete the bill and its associated journal entry.")) return;
+        const billToDelete = bills.find(b => b.id === billId);
+        if (!billToDelete) return;
+        try {
+            const { error: billError } = await supabase.from('bills').delete().eq('id', billId);
+            if (billError) throw billError;
+            
+            const { error: txError } = await supabase.from('transactions').delete().eq('id', billToDelete.relatedTransactionId);
+            if (txError) throw txError;
+
+            setBills(prev => prev.filter(b => b.id !== billId));
+            setTransactions(prev => prev.filter(tx => tx.id !== billToDelete.relatedTransactionId));
+        } catch(e: any) {
+            setError(`Failed to delete bill: ${e.message}`);
         }
     };
 
 
   const handleAddProject = async (projectName: string) => {
-    if (projectName.trim()) {
-        const newProject: Project = { name: projectName.trim(), id: crypto.randomUUID() };
-        setProjects(prev => [...prev, newProject]);
+    if (projectName.trim() && user) {
+        const newProject: Omit<Project, 'id'> = { name: projectName.trim(), user_id: user.id };
+        const { data, error } = await supabase.from('projects').insert(newProject).select().single();
+        if (error) {
+            setError(`Failed to add project: ${error.message}`);
+        } else {
+            setProjects(prev => [...prev, data]);
+        }
     }
   };
 
   const handleDeleteProject = async (projectId: string) => {
     if (window.confirm('Are you sure you want to delete this project? This will not delete associated transactions.')) {
-        setProjects(prev => prev.filter(p => p.id !== projectId));
+        const { error } = await supabase.from('projects').delete().eq('id', projectId);
+        if (error) {
+            setError(`Failed to delete project: ${error.message}`);
+        } else {
+            setProjects(prev => prev.filter(p => p.id !== projectId));
+        }
     }
   };
 
-  const handleAddRecurringTransaction = async (newRecurring: Omit<RecurringTransaction, 'id'>) => {
-      const newRecWithId = { ...newRecurring, id: crypto.randomUUID() };
-      setRecurringTransactions(prev => [...prev, newRecWithId]);
+  const handleAddRecurringTransaction = async (newRecurring: Omit<RecurringTransaction, 'id'|'user_id'>) => {
+      if (!user) return;
+      try {
+        const dataToInsert = { ...newRecurring, user_id: user.id };
+        const { data: savedRec, error } = await supabase.from('recurring_transactions').insert(dataToInsert).select().single();
+        if (error) throw error;
+        setRecurringTransactions(prev => [savedRec, ...prev]);
+      } catch (e: any) {
+          setError(`Failed to add recurring transaction: ${e.message}`);
+      }
   };
 
   const handleDeleteRecurringTransaction = async (id: string) => {
-      if (window.confirm('Are you sure you want to delete this recurring transaction schedule?')) {
-          setRecurringTransactions(prev => prev.filter(rt => rt.id !== id));
+      if (!window.confirm("Are you sure you want to delete this scheduled transaction?")) return;
+      try {
+        const { error } = await supabase.from('recurring_transactions').delete().eq('id', id);
+        if (error) throw error;
+        setRecurringTransactions(prev => prev.filter(rt => rt.id !== id));
+      } catch(e: any) {
+          setError(`Failed to delete recurring transaction: ${e.message}`);
       }
   };
 
   const handleAddAccount = async (account: Account) => {
     if (account.name.trim() && !chartOfAccounts.some(acc => acc.name.toLowerCase() === account.name.toLowerCase().trim())) {
+        // In a real app, COA would be user-specific and saved to the DB
         setChartOfAccounts(prev => [...prev, account].sort((a,b) => a.name.localeCompare(b.name)));
     } else {
         alert("Account name must be unique.");
@@ -1448,24 +1502,27 @@ const App: React.FC = () => {
         setIsHireModalOpen(false);
     };
 
-    const handleCompleteExpertSignup = (data: Omit<Expert, 'id' | 'rating' | 'reviewCount' | 'reviews' | 'verified' | 'responseTime' | 'joinedDate' | 'profileImageUrl'>) => {
-        const newExpert: Expert = {
+    const handleCompleteExpertSignup = async (data: Omit<Expert, 'id' | 'rating' | 'reviewCount' | 'reviews' | 'verified' | 'responseTime' | 'joinedDate' | 'profileImageUrl'>) => {
+        const newExpertData = {
             ...data,
-            id: crypto.randomUUID(),
             rating: 0,
             reviewCount: 0,
-            reviews: [],
             verified: false,
             responseTime: 'New Expert!',
             joinedDate: new Date().toISOString(),
             profileImageUrl: `https://i.pravatar.cc/150?img=${Math.floor(Math.random() * 70)}`, // Random image
         };
-        setExperts(prev => [newExpert, ...prev]);
         
-        // For demo purposes, we'll log them in and take them to the expert list
-        // In a real app, this would involve creating a user account
-        setAuthState('loggedIn');
-        setActiveTab('findExperts');
+        const { data: savedExpert, error } = await supabase.from('experts').insert(newExpertData).select().single();
+
+        if (error) {
+            setError(`Could not create expert profile: ${error.message}`);
+        } else {
+             // Refresh expert list and navigate
+            await fetchExperts();
+            setAuthState('loggedOut'); // Go back to landing to then login
+            alert("Profile created! Please log in to view the dashboard.");
+        }
     };
 
   const renderContent = () => {
@@ -1576,17 +1633,18 @@ const App: React.FC = () => {
   }
 
   const handleLogin = async (email: string, pass: string) => {
-      await signInWithEmailAndPassword(auth, email, pass);
+      const { error } = await supabase.auth.signInWithPassword({ email: email, password: pass });
+      if (error) throw error;
   };
 
   const handleSignUp = async (email: string, pass: string) => {
-      await createUserWithEmailAndPassword(auth, email, pass);
-      // No initial data is created in DB anymore, local state handles it.
-      setChartOfAccounts(initialChartOfAccounts);
+      const { error } = await supabase.auth.signUp({ email: email, password: pass });
+      if (error) throw error;
+      alert('Sign up successful! Please check your email to confirm.');
   };
 
   const handleLogout = () => {
-      signOut(auth);
+      supabase.auth.signOut();
   };
     
   const handleViewPublicProfile = (expertId: string) => {
@@ -1629,6 +1687,7 @@ const App: React.FC = () => {
       };
       return authState === 'loggedOut' ? 
         <LandingPage 
+            experts={experts}
             onLoginClick={() => setAuthState('loggingIn')} 
             onPrivacyClick={() => setAuthState('viewingPrivacy')} 
             onFindExpertClick={handleFindExpertClick}
@@ -1662,6 +1721,7 @@ const App: React.FC = () => {
             />
             {searchResults && <SearchResultsDropdown results={searchResults} onResultClick={handleSearchResultClick} />}
              <main className="main-content">
+                {error && <div className="error-message" role="alert" style={{marginBottom: '1rem'}}>{error}</div>}
                 {renderContent()}
             </main>
        </div>
@@ -2580,7 +2640,7 @@ const TaxAgentView: React.FC<{
 
 const RecurringView: React.FC<{
     recurringTransactions: RecurringTransaction[],
-    handleAddRecurringTransaction: (rec: Omit<RecurringTransaction, 'id'>) => void,
+    handleAddRecurringTransaction: (rec: Omit<RecurringTransaction, 'id'|'user_id'>) => void,
     handleDeleteRecurringTransaction: (id: string) => void
     chartOfAccounts: Account[],
 }> = ({ recurringTransactions, handleAddRecurringTransaction, handleDeleteRecurringTransaction, chartOfAccounts }) => {
@@ -2604,7 +2664,7 @@ const RecurringView: React.FC<{
     const handleAdd = (e: React.FormEvent) => {
         e.preventDefault();
         if (formType === 'payment') {
-            const newRec: Omit<RecurringTransaction, 'id'> = {
+            const newRec: Omit<RecurringTransaction, 'id'|'user_id'> = {
                 recurringType: 'payment',
                 description: recDesc,
                 frequency: recFreq,
@@ -2630,7 +2690,7 @@ const RecurringView: React.FC<{
                 alert("Please fill in all asset details.");
                 return;
             }
-            const newRec: Omit<RecurringTransaction, 'id'> = {
+            const newRec: Omit<RecurringTransaction, 'id'|'user_id'> = {
                 recurringType: 'depreciation',
                 description: assetDesc,
                 frequency: 'monthly', // Hardcoded
@@ -3119,7 +3179,7 @@ const EditTransactionModal = ({ transaction, onClose, onUpdate, chartOfAccounts 
     );
 };
 
-const InvoiceModal = ({ onClose, onCreate, projects, isVatEnabled, vatRate }: { onClose: () => void; onCreate: (data: Omit<Invoice, 'id'|'status'|'relatedTransactionId'> & { projectId?: string }) => void; projects: Project[], isVatEnabled: boolean, vatRate: number }) => {
+const InvoiceModal = ({ onClose, onCreate, projects, isVatEnabled, vatRate }: { onClose: () => void; onCreate: (data: Omit<Invoice, 'id'|'status'|'relatedTransactionId'|'user_id'> & { projectId?: string }) => void; projects: Project[], isVatEnabled: boolean, vatRate: number }) => {
     const [customer, setCustomer] = useState('');
     const [invoiceNumber, setInvoiceNumber] = useState('');
     const [invoiceDate, setInvoiceDate] = useState(CURRENT_DATE_ISO);
@@ -3171,7 +3231,7 @@ const InvoiceModal = ({ onClose, onCreate, projects, isVatEnabled, vatRate }: { 
     );
 };
 
-const BillModal = ({ onClose, onCreate, projects, isVatEnabled }: { onClose: () => void; onCreate: (data: Omit<Bill, 'id'|'status'|'relatedTransactionId'> & { projectId?: string, vatAmount?: number }) => void; projects: Project[], isVatEnabled: boolean }) => {
+const BillModal = ({ onClose, onCreate, projects, isVatEnabled }: { onClose: () => void; onCreate: (data: Omit<Bill, 'id'|'status'|'relatedTransactionId'|'user_id'> & { projectId?: string, vatAmount?: number }) => void; projects: Project[], isVatEnabled: boolean }) => {
     const [vendor, setVendor] = useState('');
     const [billNumber, setBillNumber] = useState('');
     const [billDate, setBillDate] = useState(CURRENT_DATE_ISO);
