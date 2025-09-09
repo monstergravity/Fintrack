@@ -78,6 +78,7 @@ interface Review {
 }
 interface Expert {
   id: string;
+  user_id: string;
   name: string;
   title: string;
   location: string;
@@ -415,13 +416,24 @@ const PublicExpertProfilePage: React.FC<{ expert: Expert; onBack: () => void; on
     </div>
 );
 
+const SparklesIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3L9.27 9.27L3 12l6.27 2.73L12 21l2.73-6.27L21 12l-6.27-2.73z"/></svg>;
+
+type ExpertFormData = Omit<Expert, 'id' | 'user_id' | 'rating' | 'reviewCount' | 'reviews' | 'verified' | 'responseTime' | 'joinedDate' | 'profileImageUrl'> & {
+    email: string;
+    password: string;
+};
+
 const ExpertSignupFlow: React.FC<{
-    onComplete: (data: Omit<Expert, 'id' | 'rating' | 'reviewCount' | 'reviews' | 'verified' | 'responseTime' | 'joinedDate' | 'profileImageUrl'>) => void;
+    onComplete: (data: ExpertFormData) => void;
     onBackToHome: () => void;
-}> = ({ onComplete, onBackToHome }) => {
+    ai: GoogleGenAI;
+    isLoading: boolean;
+}> = ({ onComplete, onBackToHome, ai, isLoading }) => {
     const [step, setStep] = useState(1);
     const [formData, setFormData] = useState({
         name: '',
+        email: '',
+        password: '',
         title: '',
         location: '',
         hourlyRate: 75,
@@ -430,6 +442,7 @@ const ExpertSignupFlow: React.FC<{
         services: [{ name: '', description: '', price: '' }],
     });
     const [currentSkill, setCurrentSkill] = useState('');
+    const [isAiLoading, setIsAiLoading] = useState<string | null>(null);
 
     const nextStep = () => setStep(s => s + 1);
     const prevStep = () => setStep(s => s - 1);
@@ -470,6 +483,61 @@ const ExpertSignupFlow: React.FC<{
             setFormData(prev => ({ ...prev, services: newServices }));
         }
     };
+
+    const handleGenerateBio = async () => {
+        setIsAiLoading('bio');
+        try {
+            const prompt = `You are a professional branding expert. Write a compelling and professional biography for a financial expert's profile. Use the following details:
+            - Name: ${formData.name || 'A financial professional'}
+            - Title: ${formData.title}
+            - Location: ${formData.location}
+            - Hourly Rate: $${formData.hourlyRate}
+            - Key Skills: ${formData.skills.join(', ')}
+            - Current draft (if any, refine it): "${formData.bio}"
+            
+            The tone should be trustworthy, experienced, and approachable for small business owners. Keep it concise, around 3-4 sentences, and write in the first person.`;
+
+            const response = await ai.models.generateContent({
+                model: "gemini-2.5-flash",
+                contents: prompt,
+            });
+            
+            setFormData(prev => ({ ...prev, bio: response.text }));
+
+        } catch (err) {
+            console.error("AI bio generation failed:", err);
+            alert("Sorry, we couldn't generate a bio right now. Please try again.");
+        } finally {
+            setIsAiLoading(null);
+        }
+    };
+
+    const handleGenerateServiceDescription = async (index: number) => {
+        const serviceName = formData.services[index].name;
+        if (!serviceName) {
+            alert("Please enter a Service Name before generating a description.");
+            return;
+        }
+        setIsAiLoading(`service-${index}`);
+        try {
+            const prompt = `You are a marketing copywriter. Write a clear and compelling description for a financial service called "${serviceName}". Briefly explain what's included and its benefits for a small business owner or solopreneur. Keep it to 1-2 sentences.`;
+
+            const response = await ai.models.generateContent({
+                model: "gemini-2.5-flash",
+                contents: prompt,
+            });
+            
+            const newServices = [...formData.services];
+            newServices[index].description = response.text;
+            setFormData(prev => ({ ...prev, services: newServices }));
+
+        } catch (err) {
+            console.error("AI service description generation failed:", err);
+            alert("Sorry, we couldn't generate a description right now. Please try again.");
+        } finally {
+            setIsAiLoading(null);
+        }
+    };
     
     const handleSubmit = () => {
         onComplete(formData);
@@ -504,9 +572,11 @@ const ExpertSignupFlow: React.FC<{
                 <div className="signup-step-card">
                     {step === 1 && (
                         <div>
-                            <h2>Tell us about yourself</h2>
-                            <p>This information will be displayed on your public profile.</p>
+                            <h2>Create Your Account & Profile</h2>
+                            <p>This information will be used to create your login and public expert profile.</p>
                             <div className="form-group"><label>Full Name</label><input type="text" name="name" value={formData.name} onChange={handleChange} placeholder="e.g., Jane Doe" required /></div>
+                            <div className="form-group"><label>Email Address</label><input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="you@example.com" required /></div>
+                            <div className="form-group"><label>Password</label><input type="password" name="password" value={formData.password} onChange={handleChange} placeholder="••••••••" required /></div>
                             <div className="form-group"><label>Professional Title</label><input type="text" name="title" value={formData.title} onChange={handleChange} placeholder="e.g., Certified Public Accountant" required /></div>
                             <div className="form-group"><label>Location</label><input type="text" name="location" value={formData.location} onChange={handleChange} placeholder="e.g., New York, NY" required /></div>
                             <div className="form-group">
@@ -519,7 +589,16 @@ const ExpertSignupFlow: React.FC<{
                         <div>
                             <h2>Showcase your expertise</h2>
                             <p>Write a compelling bio and list the skills that make you stand out.</p>
-                            <div className="form-group"><label>Biography</label><textarea name="bio" value={formData.bio} onChange={handleChange} placeholder="Describe your experience, specialty, and what makes you a great partner for small businesses." rows={6} required /></div>
+                            <div className="form-group">
+                                <div className="label-with-action">
+                                    <label>Biography</label>
+                                    <button type="button" className="btn-ai-generate" onClick={handleGenerateBio} disabled={!!isAiLoading}>
+                                        {isAiLoading === 'bio' ? <span className="loader" /> : <SparklesIcon />}
+                                        Generate with AI
+                                    </button>
+                                </div>
+                                <textarea name="bio" value={formData.bio} onChange={handleChange} placeholder="Describe your experience, specialty, and what makes you a great partner for small businesses." rows={6} required />
+                            </div>
                             <div className="form-group">
                                 <label>Skills</label>
                                 <div className="skill-input-group">
@@ -542,7 +621,16 @@ const ExpertSignupFlow: React.FC<{
                                 <div className="service-entry-form" key={index}>
                                      <h4>Service #{index + 1}</h4>
                                      <div className="form-group"><label>Service Name</label><input type="text" value={service.name} onChange={(e) => handleServiceChange(index, 'name', e.target.value)} placeholder="e.g., Monthly Bookkeeping" required /></div>
-                                     <div className="form-group"><label>Description</label><textarea value={service.description} onChange={(e) => handleServiceChange(index, 'description', e.target.value)} placeholder="Briefly describe what's included in this service." rows={3} required /></div>
+                                     <div className="form-group">
+                                        <div className="label-with-action">
+                                            <label>Description</label>
+                                            <button type="button" className="btn-ai-generate" onClick={() => handleGenerateServiceDescription(index)} disabled={!!isAiLoading}>
+                                                {isAiLoading === `service-${index}` ? <span className="loader" /> : <SparklesIcon />}
+                                                Generate with AI
+                                            </button>
+                                        </div>
+                                        <textarea value={service.description} onChange={(e) => handleServiceChange(index, 'description', e.target.value)} placeholder="Briefly describe what's included in this service." rows={3} required />
+                                     </div>
                                      <div className="form-group"><label>Price</label><input type="text" value={service.price} onChange={(e) => handleServiceChange(index, 'price', e.target.value)} placeholder="e.g., $450/month or $1,200 one-time" required /></div>
                                      {formData.services.length > 1 && <button type="button" className="btn-remove-service" onClick={() => removeService(index)}>Remove Service</button>}
                                 </div>
@@ -558,6 +646,7 @@ const ExpertSignupFlow: React.FC<{
                                  <ExpertProfileLayout expert={{
                                      ...formData,
                                      id: 'preview',
+                                     user_id: 'preview-user-id',
                                      profileImageUrl: 'https://i.pravatar.cc/150?img=10', // Placeholder
                                      rating: 0,
                                      reviewCount: 0,
@@ -572,7 +661,9 @@ const ExpertSignupFlow: React.FC<{
                      <div className="signup-navigation">
                         {step > 1 && <button className="btn-secondary" onClick={prevStep}>Previous Step</button>}
                         {step < 4 && <button className="btn-primary" onClick={nextStep}>Next Step</button>}
-                        {step === 4 && <button className="btn-primary" onClick={handleSubmit}>Submit Application</button>}
+                        {step === 4 && <button className="btn-primary" onClick={handleSubmit} disabled={isLoading}>
+                            {isLoading ? <span className="loader"/> : 'Submit Application'}
+                            </button>}
                     </div>
                 </div>
             </div>
@@ -1502,26 +1593,60 @@ const App: React.FC = () => {
         setIsHireModalOpen(false);
     };
 
-    const handleCompleteExpertSignup = async (data: Omit<Expert, 'id' | 'rating' | 'reviewCount' | 'reviews' | 'verified' | 'responseTime' | 'joinedDate' | 'profileImageUrl'>) => {
-        const newExpertData = {
-            ...data,
-            rating: 0,
-            reviewCount: 0,
-            verified: false,
-            responseTime: 'New Expert!',
-            joinedDate: new Date().toISOString(),
-            profileImageUrl: `https://i.pravatar.cc/150?img=${Math.floor(Math.random() * 70)}`, // Random image
-        };
-        
-        const { data: savedExpert, error } = await supabase.from('experts').insert(newExpertData).select().single();
+    const handleCompleteExpertSignup = async (data: ExpertFormData) => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            // 1. Sign up the user to create an auth entry
+            const { data: authData, error: authError } = await supabase.auth.signUp({
+                email: data.email,
+                password: data.password,
+            });
 
-        if (error) {
-            setError(`Could not create expert profile: ${error.message}`);
-        } else {
-             // Refresh expert list and navigate
-            await fetchExperts();
-            setAuthState('loggedOut'); // Go back to landing to then login
-            alert("Profile created! Please log in to view the dashboard.");
+            if (authError) {
+                throw authError;
+            }
+            if (!authData.user) {
+                // This can happen if user registration is disabled in Supabase settings
+                throw new Error("Signup did not return a user. Please try again.");
+            }
+
+            // 2. Prepare the expert profile data linked to the new user_id
+            const newExpertData = {
+                user_id: authData.user.id,
+                name: data.name,
+                title: data.title,
+                location: data.location,
+                hourlyRate: data.hourlyRate,
+                bio: data.bio,
+                skills: data.skills,
+                services: data.services,
+                rating: 0,
+                reviewCount: 0,
+                verified: false,
+                responseTime: 'New Expert!',
+                joinedDate: new Date().toISOString(),
+                profileImageUrl: `https://i.pravatar.cc/150?img=${Math.floor(Math.random() * 70)}`,
+            };
+            
+            // 3. Insert the profile into the public 'experts' table
+            const { error: insertError } = await supabase.from('experts').insert(newExpertData);
+
+            if (insertError) {
+                // Optional: If insert fails, you might want to delete the created auth user
+                // This is an advanced step, for now, we'll just show the error.
+                throw insertError;
+            }
+
+            // 4. Success!
+            await fetchExperts(); // Refresh the public list of experts
+            alert("Application submitted! Please check your email for a confirmation link to log in.");
+            setAuthState('loggedOut'); // Go back to the landing page, user can then log in.
+
+        } catch (err: any) {
+            setError(`Could not create expert profile: ${err.message}`);
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -1678,7 +1803,7 @@ const App: React.FC = () => {
   }
 
   if (authState === 'expertSignup') {
-        return <ExpertSignupFlow onComplete={handleCompleteExpertSignup} onBackToHome={() => setAuthState('loggedOut')} />;
+        return <ExpertSignupFlow onComplete={handleCompleteExpertSignup} onBackToHome={() => setAuthState('loggedOut')} ai={ai} isLoading={isLoading} />;
   }
   
   if (authState === 'loggedOut' || authState === 'loggingIn') {

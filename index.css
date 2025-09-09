@@ -1407,6 +1407,46 @@ textarea {
     background-color: var(--background-color);
 }
 
+/* AI Generation Button */
+.form-group .label-with-action {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.25rem;
+}
+
+.label-with-action > label {
+    margin-bottom: 0 !important;
+}
+
+.btn-ai-generate {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: none;
+    border: none;
+    color: var(--primary-color);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+}
+.btn-ai-generate:hover {
+    background-color: var(--primary-light);
+}
+.btn-ai-generate:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+.btn-ai-generate .loader {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(90, 50, 214, 0.5);
+    border-left-color: var(--primary-color);
+}
+
+
 /* Utility & Minor Component styles */
 .disclaimer { font-size: 0.8rem; color: var(--text-secondary-color); background-color: var(--background-color); padding: 0.75rem; border-radius: 8px; margin-bottom: 1.5rem; text-align: center; }
 .tax-settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; align-items: end; }
