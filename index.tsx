@@ -92,7 +92,7 @@ interface Expert {
   reviews: Review[];
   verified: boolean;
   responseTime: string;
-  joinedDate: string;
+  joineddate: string;
 }
 type AgingData = { current: number; '1-30': number; '31-60': number; '61-90': number; '90+': number; total: number; };
 type ActiveTab = 'home' | 'transactions' | 'ar' | 'ap' | 'recurring' | 'journal' | 'coa' | 'projects' | 'knowledge' | 'tax' | 'findExperts';
@@ -418,7 +418,7 @@ const PublicExpertProfilePage: React.FC<{ expert: Expert; onBack: () => void; on
 
 const SparklesIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3L9.27 9.27L3 12l6.27 2.73L12 21l2.73-6.27L21 12l-6.27-2.73z"/></svg>;
 
-type ExpertFormData = Omit<Expert, 'id' | 'user_id' | 'rating' | 'reviewCount' | 'reviews' | 'verified' | 'responseTime' | 'joinedDate' | 'profileImageUrl'> & {
+type ExpertFormData = Omit<Expert, 'id' | 'user_id' | 'rating' | 'reviewCount' | 'reviews' | 'verified' | 'responseTime' | 'joineddate' | 'profileImageUrl'> & {
     email: string;
     password: string;
 };
@@ -428,7 +428,9 @@ const ExpertSignupFlow: React.FC<{
     onBackToHome: () => void;
     ai: GoogleGenAI;
     isLoading: boolean;
-}> = ({ onComplete, onBackToHome, ai, isLoading }) => {
+    error: string | null;
+    clearError: () => void;
+}> = ({ onComplete, onBackToHome, ai, isLoading, error, clearError }) => {
     const [step, setStep] = useState(1);
     const [formData, setFormData] = useState({
         name: '',
@@ -444,8 +446,14 @@ const ExpertSignupFlow: React.FC<{
     const [currentSkill, setCurrentSkill] = useState('');
     const [isAiLoading, setIsAiLoading] = useState<string | null>(null);
 
-    const nextStep = () => setStep(s => s + 1);
-    const prevStep = () => setStep(s => s - 1);
+    const nextStep = () => {
+        if(error) clearError();
+        setStep(s => s + 1);
+    };
+    const prevStep = () => {
+        if(error) clearError();
+        setStep(s => s - 1);
+    };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
@@ -653,9 +661,21 @@ const ExpertSignupFlow: React.FC<{
                                      reviews: [],
                                      verified: false,
                                      responseTime: 'New Expert!',
-                                     joinedDate: new Date().toISOString()
+                                     joineddate: new Date().toISOString()
                                  }} onHire={() => {}} isPublic={true} />
                              </div>
+                        </div>
+                    )}
+                     {error && step === 4 && (
+                        <div className="error-message" style={{ 
+                            color: 'var(--danger-color)', 
+                            backgroundColor: '#FEF2F2',
+                            padding: '1rem',
+                            borderRadius: '8px',
+                            marginTop: '1.5rem', 
+                            textAlign: 'center' 
+                        }}>
+                            {error}
                         </div>
                     )}
                      <div className="signup-navigation">
@@ -907,11 +927,16 @@ const App: React.FC = () => {
       
       const parsedTransactions = JSON.parse(responseText) as Omit<Transaction, 'id' | 'user_id'>[];
       
+      const revenueAccounts = new Set(chartOfAccounts.filter(a => a.type === 'Revenue').map(a => a.name));
+
       for (const t of parsedTransactions) {
           const totalAmount = t.amount + (t.vatAmount || 0);
           
-          // Sanitize the transactionType from the AI to ensure it matches the database constraint.
-          const sanitizedTransactionType = t.transactionType?.toLowerCase() === 'income' ? 'income' : 'expense';
+          // Check if any journal entry credits a revenue account, which definitively makes it an income transaction.
+          const isIncomeFromJournal = t.journal.some(j => j.credit && revenueAccounts.has(j.account));
+          
+          // If the journal indicates income, force it. Otherwise, trust the AI's classification but sanitize it.
+          const sanitizedTransactionType = isIncomeFromJournal ? 'income' : (t.transactionType?.toLowerCase() === 'income' ? 'income' : 'expense');
 
           const newTxData: Omit<Transaction, 'id'> = {
               user_id: user.id,
@@ -1625,7 +1650,7 @@ const App: React.FC = () => {
                 reviewCount: 0,
                 verified: false,
                 responseTime: 'New Expert!',
-                joinedDate: new Date().toISOString(),
+                joineddate: new Date().toISOString(),
                 profileImageUrl: `https://i.pravatar.cc/150?img=${Math.floor(Math.random() * 70)}`,
             };
             
@@ -1803,7 +1828,14 @@ const App: React.FC = () => {
   }
 
   if (authState === 'expertSignup') {
-        return <ExpertSignupFlow onComplete={handleCompleteExpertSignup} onBackToHome={() => setAuthState('loggedOut')} ai={ai} isLoading={isLoading} />;
+        return <ExpertSignupFlow 
+            onComplete={handleCompleteExpertSignup} 
+            onBackToHome={() => setAuthState('loggedOut')} 
+            ai={ai} 
+            isLoading={isLoading} 
+            error={error}
+            clearError={() => setError(null)}
+        />;
   }
   
   if (authState === 'loggedOut' || authState === 'loggingIn') {
@@ -3620,7 +3652,7 @@ const ExpertProfileLayout: React.FC<{ expert: Expert, onHire: () => void, isPubl
                         </li>
                          <li className="qualification-item">
                             <CalendarIcon />
-                            <span>Member since {new Date(expert.joinedDate).getFullYear()}</span>
+                            <span>Member since {new Date(expert.joineddate).getFullYear()}</span>
                         </li>
                      </ul>
                 </div>
